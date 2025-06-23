@@ -29,9 +29,7 @@ This project provides simulation environments, configuration tools, and task def
 
   ```bash
   cd robotis_lab
-  python -m pip install -e source/robotis_lab_assets
   python -m pip install -e source/robotis_lab
-  python -m pip install -e source/robotis_mimic
   ```
 
 - Verify that the extension is correctly installed by running the following command to print all the available environments in the extension:
@@ -67,30 +65,30 @@ OMY Reach task
 
 ```bash
 # Train
-python scripts/reinforcement_learning/skrl/train.py --task=Isaac-Reach-OMY-v0 --num_envs=512 --headless
+python scripts/reinforcement_learning/skrl/train.py --task RobotisLab-Reach-OMY-v0 --num_envs=512 --headless
 
 # Play
-python scripts/reinforcement_learning/skrl/play.py --task=Isaac-Reach-OMY-v0 --num_envs=16
+python scripts/reinforcement_learning/skrl/play.py --task RobotisLab-Reach-OMY-v0 --num_envs=16
 ```
 
 OMY Lift task
 
 ```bash
 # Train
-python scripts/reinforcement_learning/skrl/train.py --task=Isaac-Lift-Cube-OMY-v0 --num_envs=512 --headless
+python scripts/reinforcement_learning/skrl/train.py --task RobotisLab-Lift-Cube-OMY-v0 --num_envs=512 --headless
 
 # Play
-python scripts/reinforcement_learning/skrl/play.py --task=Isaac-Lift-Cube-OMY-v0 --num_envs=16
+python scripts/reinforcement_learning/skrl/play.py --task RobotisLab-Lift-Cube-OMY-v0 --num_envs=16
 ```
 
 OMY Open drawer task
 
 ```bash
 # Train
-python scripts/reinforcement_learning/skrl/train.py --task=Isaac-Open-Drawer-OMY-v0 --num_envs=512 --headless
+python scripts/reinforcement_learning/skrl/train.py --task RobotisLab-Open-Drawer-OMY-v0 --num_envs=512 --headless
 
 # Play
-python scripts/reinforcement_learning/skrl/play.py --task=Isaac-Open-Drawer-OMY-v0 --num_envs=4
+python scripts/reinforcement_learning/skrl/play.py --task RobotisLab-Open-Drawer-OMY-v0 --num_envs=4
 ```
 
 ### Imitation learning
@@ -99,10 +97,10 @@ OMY Stack task (Stack the blocks in the following order: blue → red → green.
 
 ```bash
 # Teleop
-python scripts/tools/record_demos.py --task Isaac-Stack-Cube-OMY-IK-Rel-v0 --teleop_device keyboard --dataset_file ./datasets/dataset.hdf5 --num_demos 10
+python scripts/tools/record_demos.py --task RobotisLab-Stack-Cube-OMY-IK-Rel-v0 --teleop_device keyboard --dataset_file ./datasets/dataset.hdf5 --num_demos 10
 
 # Anotate
-python scripts/imitation_learning/isaaclab_mimic/annotate_demos.py --device cuda --task Isaac-Stack-Cube-OMY-IK-Rel-Mimic-v0 --auto --input_file ./datasets/dataset.hdf5 --output_file ./datasets/annotated_dataset.hdf5 --headless
+python scripts/imitation_learning/isaaclab_mimic/annotate_demos.py --device cuda --task RobotisLab-Stack-Cube-OMY-IK-Rel-Mimic-v0 --auto --input_file ./datasets/dataset.hdf5 --output_file ./datasets/annotated_dataset.hdf5 --headless
 
 # Mimic data
 python scripts/imitation_learning/isaaclab_mimic/generate_dataset.py \
@@ -111,11 +109,11 @@ python scripts/imitation_learning/isaaclab_mimic/generate_dataset.py \
 
 # Train
 python scripts/imitation_learning/robomimic/train.py \
---task Isaac-Stack-Cube-OMY-IK-Rel-v0 --algo bc \
+--task RobotisLab-Stack-Cube-OMY-IK-Rel-v0 --algo bc \
 --dataset ./datasets/generated_dataset.hdf5
 
 # Play
 python -p scripts/imitation_learning/robomimic/play.py \
---device cuda --task Isaac-Stack-Cube-OMY-IK-Rel-v0 --num_rollouts 50 \
+--device cuda --task RobotisLab-Stack-Cube-OMY-IK-Rel-v0 --num_rollouts 50 \
 --checkpoint /PATH/TO/desired_model_checkpoint.pth
 ```
