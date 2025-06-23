@@ -46,7 +46,8 @@ FRAME_MARKER_SMALL_CFG.markers["frame"].scale = (0.10, 0.10, 0.10)
 
 @configclass
 class CabinetSceneCfg(InteractiveSceneCfg):
-    """Configuration for the cabinet scene with a robot and a cabinet.
+    """
+    Configuration for the cabinet scene with a robot and a cabinet.
 
     This is the abstract base implementation, the exact scene is defined in the derived classes
     which need to set the robot and end-effector frames

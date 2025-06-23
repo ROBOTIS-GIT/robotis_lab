@@ -29,8 +29,10 @@ def object_is_lifted(
     object_cfg: SceneEntityCfg = SceneEntityCfg("object"),
     ee_frame_cfg: SceneEntityCfg = SceneEntityCfg("ee_frame"),
 ) -> torch.Tensor:
-    """Reward the agent for lifting the object above a minimal height
-    *only if* it is within a certain distance from the end-effector.
+    """
+    Reward the agent for lifting the object above a minimal height.
+
+    *Only if* it is within a certain distance from the end-effector.
     """
     object: RigidObject = env.scene[object_cfg.name]
     ee_frame: FrameTransformer = env.scene[ee_frame_cfg.name]
@@ -67,6 +69,7 @@ def object_grasp(
 ) -> torch.Tensor:
     """
     Reward function for detecting if the object is being grasped.
+
     Combines end-effector proximity and gripper closure conditions.
     """
     robot: Articulation = env.scene[robot_cfg.name]

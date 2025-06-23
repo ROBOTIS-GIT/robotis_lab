@@ -22,7 +22,7 @@ def cube_positions_in_world_frame(
     cube_2_cfg: SceneEntityCfg = SceneEntityCfg("cube_2"),
     cube_3_cfg: SceneEntityCfg = SceneEntityCfg("cube_3"),
 ) -> torch.Tensor:
-    """The position of the cubes in the world frame."""
+    """Position of the cubes in the world frame."""
     cube_1: RigidObject = env.scene[cube_1_cfg.name]
     cube_2: RigidObject = env.scene[cube_2_cfg.name]
     cube_3: RigidObject = env.scene[cube_3_cfg.name]
@@ -36,7 +36,7 @@ def instance_randomize_cube_positions_in_world_frame(
     cube_2_cfg: SceneEntityCfg = SceneEntityCfg("cube_2"),
     cube_3_cfg: SceneEntityCfg = SceneEntityCfg("cube_3"),
 ) -> torch.Tensor:
-    """The position of the cubes in the world frame."""
+    """Position of the cubes in the world frame."""
     if not hasattr(env, "rigid_objects_in_focus"):
         return torch.full((env.num_envs, 9), fill_value=-1)
 
@@ -64,7 +64,7 @@ def cube_orientations_in_world_frame(
     cube_2_cfg: SceneEntityCfg = SceneEntityCfg("cube_2"),
     cube_3_cfg: SceneEntityCfg = SceneEntityCfg("cube_3"),
 ):
-    """The orientation of the cubes in the world frame."""
+    """Orientation of the cubes in the world frame."""
     cube_1: RigidObject = env.scene[cube_1_cfg.name]
     cube_2: RigidObject = env.scene[cube_2_cfg.name]
     cube_3: RigidObject = env.scene[cube_3_cfg.name]
@@ -78,7 +78,7 @@ def instance_randomize_cube_orientations_in_world_frame(
     cube_2_cfg: SceneEntityCfg = SceneEntityCfg("cube_2"),
     cube_3_cfg: SceneEntityCfg = SceneEntityCfg("cube_3"),
 ) -> torch.Tensor:
-    """The orientation of the cubes in the world frame."""
+    """Orientation of the cubes in the world frame."""
     if not hasattr(env, "rigid_objects_in_focus"):
         return torch.full((env.num_envs, 9), fill_value=-1)
 
@@ -107,21 +107,6 @@ def object_obs(
     cube_3_cfg: SceneEntityCfg = SceneEntityCfg("cube_3"),
     ee_frame_cfg: SceneEntityCfg = SceneEntityCfg("ee_frame"),
 ):
-    """
-    Object observations (in world frame):
-        cube_1 pos,
-        cube_1 quat,
-        cube_2 pos,
-        cube_2 quat,
-        cube_3 pos,
-        cube_3 quat,
-        gripper to cube_1,
-        gripper to cube_2,
-        gripper to cube_3,
-        cube_1 to cube_2,
-        cube_2 to cube_3,
-        cube_1 to cube_3,
-    """
     cube_1: RigidObject = env.scene[cube_1_cfg.name]
     cube_2: RigidObject = env.scene[cube_2_cfg.name]
     cube_3: RigidObject = env.scene[cube_3_cfg.name]
@@ -171,21 +156,6 @@ def instance_randomize_object_obs(
     cube_3_cfg: SceneEntityCfg = SceneEntityCfg("cube_3"),
     ee_frame_cfg: SceneEntityCfg = SceneEntityCfg("ee_frame"),
 ):
-    """
-    Object observations (in world frame):
-        cube_1 pos,
-        cube_1 quat,
-        cube_2 pos,
-        cube_2 quat,
-        cube_3 pos,
-        cube_3 quat,
-        gripper to cube_1,
-        gripper to cube_2,
-        gripper to cube_3,
-        cube_1 to cube_2,
-        cube_2 to cube_3,
-        cube_1 to cube_3,
-    """
     if not hasattr(env, "rigid_objects_in_focus"):
         return torch.full((env.num_envs, 9), fill_value=-1)
 
@@ -273,7 +243,6 @@ def object_grasped(
     gripper_close_threshold: torch.tensor = torch.tensor([0.6]),
 ) -> torch.Tensor:
     """Check if an object is grasped by the specified robot."""
-
     robot: Articulation = env.scene[robot_cfg.name]
     ee_frame: FrameTransformer = env.scene[ee_frame_cfg.name]
     object: RigidObject = env.scene[object_cfg.name]
@@ -303,7 +272,6 @@ def object_stacked(
     gripper_open_threshold: torch.tensor = torch.tensor([0.03]),
 ) -> torch.Tensor:
     """Check if an object is stacked by the specified robot."""
-
     robot: Articulation = env.scene[robot_cfg.name]
     upper_object: RigidObject = env.scene[upper_object_cfg.name]
     lower_object: RigidObject = env.scene[lower_object_cfg.name]

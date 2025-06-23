@@ -26,7 +26,7 @@ from robotis_lab.tasks.manager_based.lift.lift_env_cfg import LiftEnvCfg
 # Pre-defined configs
 ##
 from isaaclab.markers.config import FRAME_MARKER_CFG  # isort: skip
-from robotis_lab_assets import OMY_LIFT_CFG  # isort: skip
+from robotis_lab.assets.open_manipulator_y import OMY_LIFT_CFG  # isort: skip
 
 
 @configclass

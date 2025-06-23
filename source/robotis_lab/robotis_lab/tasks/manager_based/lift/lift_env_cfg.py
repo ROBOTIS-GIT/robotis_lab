@@ -36,10 +36,12 @@ import math
 
 
 @configclass
-class ObjectTableSceneCfg(InteractiveSceneCfg):
-    """Configuration for the lift scene with a robot and a object.
-    This is the abstract base implementation, the exact scene is defined in the derived classes
-    which need to set the target object, robot and end-effector frames
+class ObjectTableSceneCfg(SceneCfg):
+    """
+    Configuration for the lift scene with a robot and an object.
+
+    This is the abstract base implementation. The exact scene is defined in the derived classes,
+    which need to set the target object, robot, and end-effector frames.
     """
 
     # robots: will be populated by agent env cfg

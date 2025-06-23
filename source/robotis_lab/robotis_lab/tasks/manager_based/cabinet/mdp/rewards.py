@@ -21,7 +21,8 @@ if TYPE_CHECKING:
 
 
 def approach_ee_handle(env: ManagerBasedRLEnv, threshold: float) -> torch.Tensor:
-    r"""Reward the robot for reaching the drawer handle using inverse-square law.
+    r"""
+    Reward the robot for reaching the drawer handle using inverse-square law.
 
     It uses a piecewise function to reward the robot for reaching the handle.
 
@@ -46,7 +47,8 @@ def approach_ee_handle(env: ManagerBasedRLEnv, threshold: float) -> torch.Tensor
 
 
 def align_ee_handle(env: ManagerBasedRLEnv) -> torch.Tensor:
-    """Reward for aligning the end-effector with the handle.
+    """
+    Reward for aligning the end-effector with the handle.
 
     The reward is based on the alignment of the gripper with the handle. It is computed as follows:
 
@@ -79,7 +81,8 @@ def align_ee_handle(env: ManagerBasedRLEnv) -> torch.Tensor:
 
 
 def align_grasp_around_handle(env: ManagerBasedRLEnv) -> torch.Tensor:
-    """Bonus for correct hand orientation around the handle.
+    """
+    Bonus for correct hand orientation around the handle.
 
     The correct hand orientation is when the left finger is above the handle and the right finger is below the handle.
     """
@@ -98,7 +101,8 @@ def align_grasp_around_handle(env: ManagerBasedRLEnv) -> torch.Tensor:
 
 
 def approach_gripper_handle(env: ManagerBasedRLEnv, offset: float = 0.04) -> torch.Tensor:
-    """Reward the robot's gripper reaching the drawer handle with the right pose.
+    """
+    Reward the robot's gripper reaching the drawer handle with the right pose.
 
     This function returns the distance of fingertips to the handle when the fingers are in a grasping orientation
     (i.e., the left finger is above the handle and the right finger is below the handle). Otherwise, it returns zero.
@@ -128,13 +132,12 @@ def approach_gripper_handle(env: ManagerBasedRLEnv, offset: float = 0.04) -> tor
 def grasp_handle(
     env: ManagerBasedRLEnv, threshold: float, open_joint_pos: float, asset_cfg: SceneEntityCfg
 ) -> torch.Tensor:
-    """Reward for closing the fingers when being close to the handle.
+    """
+    Reward for closing the fingers when being close to the handle.
 
     The :attr:`threshold` is the distance from the handle at which the fingers should be closed.
     The :attr:`open_joint_pos` is the joint position when the fingers are open.
 
-    Note:
-        It is assumed that zero joint position corresponds to the fingers being closed.
     """
     end_effector_pos = env.scene["ee_frame"].data.target_pos_w[..., 0, :]
     handle_pos = env.scene["cabinet_frame"].data.target_pos_w[..., 0, :]
@@ -147,7 +150,8 @@ def grasp_handle(
 
 
 def open_drawer_bonus(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
-    """Bonus for opening the drawer given by the joint position of the drawer.
+    """
+    Bonus for opening the drawer given by the joint position of the drawer.
 
     The bonus is given when the drawer is open. If the grasp is around the handle, the bonus is doubled.
     """
@@ -158,7 +162,8 @@ def open_drawer_bonus(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torc
 
 
 def multi_stage_open_drawer(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
-    """Multi-stage bonus for opening the drawer.
+    """
+    Multi-stage bonus for opening the drawer.
 
     Depending on the drawer's position, the reward is given in three stages: easy, medium, and hard.
     This helps the agent to learn to open the drawer in a controlled manner.

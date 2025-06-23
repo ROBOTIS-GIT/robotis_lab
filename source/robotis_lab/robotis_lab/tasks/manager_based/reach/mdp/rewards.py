@@ -17,7 +17,8 @@ if TYPE_CHECKING:
 
 
 def position_command_error(env: ManagerBasedRLEnv, command_name: str, asset_cfg: SceneEntityCfg) -> torch.Tensor:
-    """Penalize tracking of the position error using L2-norm.
+    """
+    Penalize tracking of the position error using L2-norm.
 
     The function computes the position error between the desired position (from the command) and the
     current position of the asset's body (in world frame). The position error is computed as the L2-norm
@@ -36,7 +37,8 @@ def position_command_error(env: ManagerBasedRLEnv, command_name: str, asset_cfg:
 def position_command_error_tanh(
     env: ManagerBasedRLEnv, std: float, command_name: str, asset_cfg: SceneEntityCfg
 ) -> torch.Tensor:
-    """Reward tracking of the position using the tanh kernel.
+    """
+    Reward tracking of the position using the tanh kernel.
 
     The function computes the position error between the desired position (from the command) and the
     current position of the asset's body (in world frame) and maps it with a tanh kernel.
@@ -53,7 +55,8 @@ def position_command_error_tanh(
 
 
 def orientation_command_error(env: ManagerBasedRLEnv, command_name: str, asset_cfg: SceneEntityCfg) -> torch.Tensor:
-    """Penalize tracking orientation error using shortest path.
+    """
+    Penalize tracking orientation error using shortest path.
 
     The function computes the orientation error between the desired orientation (from the command) and the
     current orientation of the asset's body (in world frame). The orientation error is computed as the shortest
