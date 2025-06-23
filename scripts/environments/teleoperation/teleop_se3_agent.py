@@ -1,4 +1,4 @@
-# Copyright (c) 2022-2025, The Isaac Lab Project Developers.
+# Copyright (c) 2022-2025, The Isaac Lab Project Developers (https://github.com/isaac-sim/IsaacLab/blob/main/CONTRIBUTORS.md).
 # All rights reserved.
 #
 # SPDX-License-Identifier: BSD-3-Clause
@@ -17,13 +17,26 @@ parser.add_argument("--num_envs", type=int, default=1, help="Number of environme
 parser.add_argument("--teleop_device", type=str, default="keyboard", help="Device for interacting with environment")
 parser.add_argument("--task", type=str, default=None, help="Name of the task.")
 parser.add_argument("--sensitivity", type=float, default=1.0, help="Sensitivity factor.")
-
+parser.add_argument(
+    "--enable_pinocchio",
+    action="store_true",
+    default=False,
+    help="Enable Pinocchio.",
+)
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
 # parse the arguments
 args_cli = parser.parse_args()
 
 app_launcher_args = vars(args_cli)
+
+if args_cli.enable_pinocchio:
+    # Import pinocchio before AppLauncher to force the use of the version installed by IsaacLab and
+    # not the one installed by Isaac Sim pinocchio is required by the Pink IK controllers and the
+    # GR1T2 retargeter
+    import pinocchio  # noqa: F401
+if "handtracking" in args_cli.teleop_device.lower():
+    app_launcher_args["xr"] = True
 
 # launch omniverse app
 app_launcher = AppLauncher(app_launcher_args)
@@ -43,13 +56,17 @@ if "handtracking" in args_cli.teleop_device.lower():
 
 from isaaclab.devices import OpenXRDevice, Se3Gamepad, Se3Keyboard, Se3SpaceMouse
 
+if args_cli.enable_pinocchio:
+    from isaaclab.devices.openxr.retargeters.humanoid.fourier.gr1t2_retargeter import GR1T2Retargeter
+    import isaaclab_tasks.manager_based.manipulation.pick_place  # noqa: F401
 from isaaclab.devices.openxr.retargeters.manipulator import GripperRetargeter, Se3AbsRetargeter, Se3RelRetargeter
 from isaaclab.managers import TerminationTermCfg as DoneTerm
 
-import robotis_lab  # noqa: F401
-from robotis_lab.tasks.manager_based.manipulation.lift import mdp
-from robotis_lab.utils import parse_env_cfg
+import isaaclab_tasks  # noqa: F401
+from isaaclab_tasks.manager_based.manipulation.lift import mdp
+from isaaclab_tasks.utils import parse_env_cfg
 
+import robotis_lab # noqa: F401
 
 def pre_process_actions(
     teleop_data: tuple[np.ndarray, bool] | list[tuple[np.ndarray, np.ndarray, np.ndarray]], num_envs: int, device: str
