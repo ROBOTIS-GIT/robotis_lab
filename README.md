@@ -8,7 +8,7 @@
 
 ## Overview
 
-**robotis_lab** is a research-oriented repository based on *[Isaac Lab](https://isaac-sim.github.io/IsaacLab)**, designed to enable reinforcement learning (RL) and imitation learning (IL) experiments using Robotis robots in simulation.
+**robotis_lab** is a research-oriented repository based on [Isaac Lab](https://isaac-sim.github.io/IsaacLab)**, designed to enable reinforcement learning (RL) and imitation learning (IL) experiments using Robotis robots in simulation.
 This project provides simulation environments, configuration tools, and task definitions tailored for Robotis hardware, leveraging NVIDIA Isaac Sim’s powerful GPU-accelerated physics engine and Isaac Lab’s modular RL pipeline.
 
 > [!IMPORTANT]
@@ -41,6 +41,7 @@ This project provides simulation environments, configuration tools, and task def
   ```
 
 ## Try examples
+![OpenManipulatorY-in-IsaacSIm11_RL6_-_online-video-cutter com_](https://github.com/user-attachments/assets/af129f58-8c2a-40fc-a2b2-aabe164579da)
 
 > [!NOTE]
 > If you want to control a **SINGLE ROBOT** with the keyboard during playback, add `--keyboard` at the end of the play script.
