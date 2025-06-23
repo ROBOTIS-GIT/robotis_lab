@@ -1,4 +1,4 @@
-# Copyright (c) 2022-2025, The Isaac Lab Project Developers.
+# Copyright (c) 2022-2025, The Isaac Lab Project Developers (https://github.com/isaac-sim/IsaacLab/blob/main/CONTRIBUTORS.md).
 # All rights reserved.
 #
 # SPDX-License-Identifier: BSD-3-Clause
@@ -88,9 +88,12 @@ from isaaclab.utils.io import dump_pickle, dump_yaml
 
 from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlVecEnvWrapper
 
-import robotis_lab_tasks  # noqa: F401
-from robotis_lab_tasks.utils import get_checkpoint_path
-from robotis_lab_tasks.utils.hydra import hydra_task_config
+import isaaclab_tasks  # noqa: F401
+from isaaclab_tasks.utils import get_checkpoint_path
+from isaaclab_tasks.utils.hydra import hydra_task_config
+
+import robotis_lab  # noqa: F401
+# PLACEHOLDER: Extension template (do not remove this comment)
 
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True

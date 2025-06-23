@@ -1,4 +1,4 @@
-# Copyright (c) 2022-2025, The Isaac Lab Project Developers.
+# Copyright (c) 2022-2025, The Isaac Lab Project Developers (https://github.com/isaac-sim/IsaacLab/blob/main/CONTRIBUTORS.md).
 # All rights reserved.
 #
 # SPDX-License-Identifier: BSD-3-Clause
@@ -83,8 +83,10 @@ from robomimic.config import Config, config_factory
 from robomimic.utils.log_utils import DataLogger, PrintLogger
 
 # Isaac Lab imports (needed so that environment is registered)
-import robotis_lab_tasks  # noqa: F401
+import isaaclab_tasks  # noqa: F401
+import isaaclab_tasks.manager_based.manipulation.pick_place  # noqa: F401
 
+import robotis_lab  # noqa: F401
 
 def normalize_hdf5_actions(config: Config, log_dir: str) -> str:
     """Normalizes actions in hdf5 dataset to [-1, 1] range.
@@ -353,15 +355,16 @@ def main(args: argparse.Namespace):
     if args.task is not None:
         # obtain the configuration entry point
         cfg_entry_point_key = f"robomimic_{args.algo}_cfg_entry_point"
+        task_name = args.task.split(":")[-1]
 
-        print(f"Loading configuration for task: {args.task}")
+        print(f"Loading configuration for task: {task_name}")
         print(gym.envs.registry.keys())
         print(" ")
-        cfg_entry_point_file = gym.spec(args.task).kwargs.pop(cfg_entry_point_key)
+        cfg_entry_point_file = gym.spec(task_name).kwargs.pop(cfg_entry_point_key)
         # check if entry point exists
         if cfg_entry_point_file is None:
             raise ValueError(
-                f"Could not find configuration for the environment: '{args.task}'."
+                f"Could not find configuration for the environment: '{task_name}'."
                 f" Please check that the gym registry has the entry point: '{cfg_entry_point_key}'."
             )
 

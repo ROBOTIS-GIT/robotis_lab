@@ -3,11 +3,6 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
-# Copyright (c) 2022-2025, The Isaac Lab Project Developers.
-# All rights reserved.
-#
-# SPDX-License-Identifier: BSD-3-Clause
-
 """Script to play a checkpoint if an RL agent from RSL-RL."""
 
 """Launch Isaac Sim Simulator first."""
@@ -63,9 +58,10 @@ from isaaclab.utils.pretrained_checkpoint import get_published_pretrained_checkp
 
 from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlVecEnvWrapper, export_policy_as_jit, export_policy_as_onnx
 
-import robotis_lab_tasks  # noqa: F401
-from robotis_lab_tasks.utils import get_checkpoint_path, parse_env_cfg
+import isaaclab_tasks  # noqa: F401
+from isaaclab_tasks.utils import get_checkpoint_path, parse_env_cfg
 
+import robotis_lab  # noqa: F401
 # PLACEHOLDER: Extension template (do not remove this comment)
 
 

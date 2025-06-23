@@ -30,7 +30,7 @@ This project provides simulation environments, configuration tools, and task def
   ```bash
   cd robotis_lab
   python -m pip install -e source/robotis_lab_assets
-  python -m pip install -e source/robotis_lab_tasks
+  python -m pip install -e source/robotis_lab
   python -m pip install -e source/robotis_mimic
   ```
 

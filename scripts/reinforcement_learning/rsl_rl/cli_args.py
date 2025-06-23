@@ -1,4 +1,4 @@
-# Copyright (c) 2022-2025, The Isaac Lab Project Developers.
+# Copyright (c) 2022-2025, The Isaac Lab Project Developers (https://github.com/isaac-sim/IsaacLab/blob/main/CONTRIBUTORS.md).
 # All rights reserved.
 #
 # SPDX-License-Identifier: BSD-3-Clause
@@ -49,7 +49,7 @@ def parse_rsl_rl_cfg(task_name: str, args_cli: argparse.Namespace) -> RslRlOnPol
     Returns:
         The parsed configuration for RSL-RL agent based on inputs.
     """
-    from robotis_lab_tasks.utils.parse_cfg import load_cfg_from_registry
+    from isaaclab_tasks.utils.parse_cfg import load_cfg_from_registry
 
     # load the default configuration
     rslrl_cfg: RslRlOnPolicyRunnerCfg = load_cfg_from_registry(task_name, "rsl_rl_cfg_entry_point")

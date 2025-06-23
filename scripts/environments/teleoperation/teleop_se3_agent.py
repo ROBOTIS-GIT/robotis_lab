@@ -46,9 +46,9 @@ from isaaclab.devices import OpenXRDevice, Se3Gamepad, Se3Keyboard, Se3SpaceMous
 from isaaclab.devices.openxr.retargeters.manipulator import GripperRetargeter, Se3AbsRetargeter, Se3RelRetargeter
 from isaaclab.managers import TerminationTermCfg as DoneTerm
 
-import robotis_lab_tasks  # noqa: F401
-from robotis_lab_tasks.manager_based.manipulation.lift import mdp
-from robotis_lab_tasks.utils import parse_env_cfg
+import robotis_lab  # noqa: F401
+from robotis_lab.tasks.manager_based.manipulation.lift import mdp
+from robotis_lab.utils import parse_env_cfg
 
 
 def pre_process_actions(

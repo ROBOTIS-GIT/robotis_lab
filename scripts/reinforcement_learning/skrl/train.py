@@ -1,4 +1,4 @@
-# Copyright (c) 2022-2025, The Isaac Lab Project Developers.
+# Copyright (c) 2022-2025, The Isaac Lab Project Developers (https://github.com/isaac-sim/IsaacLab/blob/main/CONTRIBUTORS.md).
 # All rights reserved.
 #
 # SPDX-License-Identifier: BSD-3-Clause
@@ -97,8 +97,10 @@ from isaaclab.utils.io import dump_pickle, dump_yaml
 
 from isaaclab_rl.skrl import SkrlVecEnvWrapper
 
-import robotis_lab_tasks  # noqa: F401
-from robotis_lab_tasks.utils.hydra import hydra_task_config
+import isaaclab_tasks  # noqa: F401
+from isaaclab_tasks.utils.hydra import hydra_task_config
+
+import robotis_lab  # noqa: F401
 
 # PLACEHOLDER: Extension template (do not remove this comment)
 

@@ -1,4 +1,4 @@
-# Copyright (c) 2024-2025, The Isaac Lab Project Developers.
+# Copyright (c) 2024-2025, The Isaac Lab Project Developers (https://github.com/isaac-sim/IsaacLab/blob/main/CONTRIBUTORS.md).
 # All rights reserved.
 #
 # SPDX-License-Identifier: Apache-2.0
@@ -27,11 +27,22 @@ parser.add_argument(
     help="File name of the annotated output dataset file.",
 )
 parser.add_argument("--auto", action="store_true", default=False, help="Automatically annotate subtasks.")
+parser.add_argument(
+    "--enable_pinocchio",
+    action="store_true",
+    default=False,
+    help="Enable Pinocchio.",
+)
 
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
 # parse the arguments
 args_cli = parser.parse_args()
+
+if args_cli.enable_pinocchio:
+    # Import pinocchio before AppLauncher to force the use of the version installed by IsaacLab and not the one installed by Isaac Sim
+    # pinocchio is required by the Pink IK controllers and the GR1T2 retargeter
+    import pinocchio  # noqa: F401
 
 # launch the simulator
 app_launcher = AppLauncher(args_cli)
@@ -44,9 +55,10 @@ import gymnasium as gym
 import os
 import torch
 
-import robotis_lab_mimic.envs  # noqa: F401
+import isaaclab_mimic.envs  # noqa: F401
 
-import robotis_lab_mimic.envs.omy_envs  # noqa: F401
+if args_cli.enable_pinocchio:
+    import isaaclab_mimic.envs.pinocchio_envs  # noqa: F401
 
 # Only enables inputs if this script is NOT headless mode
 if not args_cli.headless and not os.environ.get("HEADLESS", 0):
@@ -58,8 +70,10 @@ from isaaclab.managers import RecorderTerm, RecorderTermCfg, TerminationTermCfg
 from isaaclab.utils import configclass
 from isaaclab.utils.datasets import EpisodeData, HDF5DatasetFileHandler
 
-import robotis_lab_tasks  # noqa: F401
-from robotis_lab_tasks.utils.parse_cfg import parse_env_cfg
+import isaaclab_tasks  # noqa: F401
+from isaaclab_tasks.utils.parse_cfg import parse_env_cfg
+
+import robotis_lab  # noqa: F401
 
 is_paused = False
 current_action_index = 0
@@ -157,13 +171,13 @@ def main():
         os.makedirs(output_dir)
 
     if args_cli.task is not None:
-        env_name = args_cli.task
+        env_name = args_cli.task.split(":")[-1]
     if env_name is None:
         raise ValueError("Task/env name was not specified nor found in the dataset.")
 
     env_cfg = parse_env_cfg(env_name, device=args_cli.device, num_envs=1)
 
-    env_cfg.env_name = args_cli.task
+    env_cfg.env_name = env_name
 
     # extract success checking function to invoke manually
     success_term = None

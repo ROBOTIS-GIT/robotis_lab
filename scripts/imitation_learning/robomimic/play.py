@@ -1,4 +1,4 @@
-# Copyright (c) 2022-2025, The Isaac Lab Project Developers.
+# Copyright (c) 2022-2025, The Isaac Lab Project Developers (https://github.com/isaac-sim/IsaacLab/blob/main/CONTRIBUTORS.md).
 # All rights reserved.
 #
 # SPDX-License-Identifier: BSD-3-Clause
@@ -40,11 +40,18 @@ parser.add_argument(
 parser.add_argument(
     "--norm_factor_max", type=float, default=None, help="Optional: maximum value of the normalization factor."
 )
+parser.add_argument("--enable_pinocchio", default=False, action="store_true", help="Enable Pinocchio.")
+
 
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
 # parse the arguments
 args_cli = parser.parse_args()
+
+if args_cli.enable_pinocchio:
+    # Import pinocchio before AppLauncher to force the use of the version installed by IsaacLab and not the one installed by Isaac Sim
+    # pinocchio is required by the Pink IK controllers and the GR1T2 retargeter
+    import pinocchio  # noqa: F401
 
 # launch omniverse app
 app_launcher = AppLauncher(args_cli)
@@ -59,8 +66,12 @@ import torch
 import robomimic.utils.file_utils as FileUtils
 import robomimic.utils.torch_utils as TorchUtils
 
-from robotis_lab_tasks.utils import parse_env_cfg
+if args_cli.enable_pinocchio:
+    import isaaclab_tasks.manager_based.manipulation.pick_place  # noqa: F401
 
+from isaaclab_tasks.utils import parse_env_cfg
+
+import robotis_lab  # noqa: F401
 
 def rollout(policy, env, success_term, horizon, device):
     """Perform a single rollout of the policy in the environment.

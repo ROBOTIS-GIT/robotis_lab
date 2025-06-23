@@ -1,4 +1,4 @@
-# Copyright (c) 2024-2025, The Isaac Lab Project Developers.
+# Copyright (c) 2024-2025, The Isaac Lab Project Developers (https://github.com/isaac-sim/IsaacLab/blob/main/CONTRIBUTORS.md).
 # All rights reserved.
 #
 # SPDX-License-Identifier: Apache-2.0
@@ -33,11 +33,21 @@ parser.add_argument(
     action="store_true",
     help="pause after every subtask during generation for debugging - only useful with render flag",
 )
-
+parser.add_argument(
+    "--enable_pinocchio",
+    action="store_true",
+    default=False,
+    help="Enable Pinocchio.",
+)
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
 # parse the arguments
 args_cli = parser.parse_args()
+
+if args_cli.enable_pinocchio:
+    # Import pinocchio before AppLauncher to force the use of the version installed by IsaacLab and not the one installed by Isaac Sim
+    # pinocchio is required by the Pink IK controllers and the GR1T2 retargeter
+    import pinocchio  # noqa: F401
 
 # launch the simulator
 app_launcher = AppLauncher(args_cli)
@@ -56,22 +66,26 @@ import omni
 
 from isaaclab.envs import ManagerBasedRLMimicEnv
 
-import robotis_lab_mimic.envs  # noqa: F401
+import isaaclab_mimic.envs  # noqa: F401
 
-import robotis_lab_mimic.envs.omy_envs  # noqa: F401
+if args_cli.enable_pinocchio:
+    import isaaclab_mimic.envs.pinocchio_envs  # noqa: F401
+from isaaclab_mimic.datagen.generation import env_loop, setup_async_generation, setup_env_config
+from isaaclab_mimic.datagen.utils import get_env_name_from_dataset, setup_output_paths
 
-from robotis_lab_mimic.datagen.generation import env_loop, setup_async_generation, setup_env_config
-from robotis_lab_mimic.datagen.utils import get_env_name_from_dataset, setup_output_paths
+import isaaclab_tasks  # noqa: F401
 
-import robotis_lab_tasks  # noqa: F401
-
+import robotis_lab  # noqa: F401
 
 def main():
     num_envs = args_cli.num_envs
 
     # Setup output paths and get env name
     output_dir, output_file_name = setup_output_paths(args_cli.output_file)
-    env_name = args_cli.task or get_env_name_from_dataset(args_cli.input_file)
+    task_name = args_cli.task
+    if task_name:
+        task_name = args_cli.task.split(":")[-1]
+    env_name = task_name or get_env_name_from_dataset(args_cli.input_file)
 
     # Configure environment
     env_cfg, success_term = setup_env_config(

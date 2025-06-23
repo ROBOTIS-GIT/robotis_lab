@@ -1,8 +1,7 @@
-# Copyright (c) 2024-2025, The Isaac Lab Project Developers.
+# Copyright (c) 2022-2025, The Isaac Lab Project Developers (https://github.com/isaac-sim/IsaacLab/blob/main/CONTRIBUTORS.md).
 # All rights reserved.
 #
 # SPDX-License-Identifier: BSD-3-Clause
-
 """Script to replay demonstrations with Isaac Lab environments."""
 
 """Launch Isaac Sim Simulator first."""
@@ -33,12 +32,23 @@ parser.add_argument(
         " --num_envs is 1."
     ),
 )
+parser.add_argument(
+    "--enable_pinocchio",
+    action="store_true",
+    default=False,
+    help="Enable Pinocchio.",
+)
 
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
 # parse the arguments
 args_cli = parser.parse_args()
 # args_cli.headless = True
+
+if args_cli.enable_pinocchio:
+    # Import pinocchio before AppLauncher to force the use of the version installed by IsaacLab and not the one installed by Isaac Sim
+    # pinocchio is required by the Pink IK controllers and the GR1T2 retargeter
+    import pinocchio  # noqa: F401
 
 # launch the simulator
 app_launcher = AppLauncher(args_cli)
@@ -54,8 +64,13 @@ import torch
 from isaaclab.devices import Se3Keyboard
 from isaaclab.utils.datasets import EpisodeData, HDF5DatasetFileHandler
 
-import robotis_lab_tasks  # noqa: F401
-from robotis_lab_tasks.utils.parse_cfg import parse_env_cfg
+if args_cli.enable_pinocchio:
+    import isaaclab_tasks.manager_based.manipulation.pick_place  # noqa: F401
+
+import isaaclab_tasks  # noqa: F401
+from isaaclab_tasks.utils.parse_cfg import parse_env_cfg
+
+import robotis_lab  # noqa: F401
 
 is_paused = False
 
@@ -121,7 +136,7 @@ def main():
         episode_indices_to_replay = list(range(episode_count))
 
     if args_cli.task is not None:
-        env_name = args_cli.task
+        env_name = args_cli.task.split(":")[-1]
     if env_name is None:
         raise ValueError("Task/env name was not specified nor found in the dataset.")
 
@@ -134,7 +149,7 @@ def main():
     env_cfg.terminations = {}
 
     # create environment from loaded config
-    env = gym.make(env_name, cfg=env_cfg).unwrapped
+    env = gym.make(args_cli.task, cfg=env_cfg).unwrapped
 
     teleop_interface = Se3Keyboard(pos_sensitivity=0.1, rot_sensitivity=0.1)
     teleop_interface.add_callback("N", play_cb)

@@ -1,8 +1,7 @@
-# Copyright (c) 2024-2025, The Isaac Lab Project Developers.
+# Copyright (c) 2022-2025, The Isaac Lab Project Developers (https://github.com/isaac-sim/IsaacLab/blob/main/CONTRIBUTORS.md).
 # All rights reserved.
 #
 # SPDX-License-Identifier: BSD-3-Clause
-
 """
 Script to record demonstrations with Isaac Lab environments using human teleoperation.
 
@@ -55,6 +54,12 @@ parser.add_argument(
     default=10,
     help="Number of continuous steps with task success for concluding a demo as successful. Default is 10.",
 )
+parser.add_argument(
+    "--enable_pinocchio",
+    action="store_true",
+    default=False,
+    help="Enable Pinocchio.",
+)
 
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
@@ -63,10 +68,19 @@ args_cli = parser.parse_args()
 
 app_launcher_args = vars(args_cli)
 
+if args_cli.enable_pinocchio:
+    # Import pinocchio before AppLauncher to force the use of the version installed by IsaacLab and not the one installed by Isaac Sim
+    # pinocchio is required by the Pink IK controllers and the GR1T2 retargeter
+    import pinocchio  # noqa: F401
+if "handtracking" in args_cli.teleop_device.lower():
+    app_launcher_args["xr"] = True
+
 # launch the simulator
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
+if "handtracking" in args_cli.teleop_device.lower():
+    from isaacsim.xr.openxr import OpenXRSpec
 
 # Omniverse logger
 import omni.log
@@ -75,17 +89,22 @@ import omni.ui as ui
 # Additional Isaac Lab imports that can only be imported after the simulator is running
 from isaaclab.devices import OpenXRDevice, Se3Keyboard, Se3SpaceMouse
 
-import robotis_lab_mimic.envs  # noqa: F401
-from robotis_lab_mimic.ui.instruction_display import InstructionDisplay, show_subtask_instructions
+import isaaclab_mimic.envs  # noqa: F401
+from isaaclab_mimic.ui.instruction_display import InstructionDisplay, show_subtask_instructions
+
+if args_cli.enable_pinocchio:
+    from isaaclab.devices.openxr.retargeters.humanoid.fourier.gr1t2_retargeter import GR1T2Retargeter
+    import isaaclab_tasks.manager_based.manipulation.pick_place  # noqa: F401
 
 from isaaclab.devices.openxr.retargeters.manipulator import GripperRetargeter, Se3AbsRetargeter, Se3RelRetargeter
 from isaaclab.envs.mdp.recorders.recorders_cfg import ActionStateRecorderManagerCfg
 from isaaclab.envs.ui import EmptyWindow
 from isaaclab.managers import DatasetExportMode
 
-import robotis_lab_tasks  # noqa: F401
-from robotis_lab_tasks.utils.parse_cfg import parse_env_cfg
+import isaaclab_tasks  # noqa: F401
+from isaaclab_tasks.utils.parse_cfg import parse_env_cfg
 
+import robotis_lab  # noqa: F401
 
 class RateLimiter:
     """Convenience class for enforcing rates in loops."""
@@ -185,7 +204,7 @@ def main():
 
     # parse configuration
     env_cfg = parse_env_cfg(args_cli.task, device=args_cli.device, num_envs=1)
-    env_cfg.env_name = args_cli.task
+    env_cfg.env_name = args_cli.task.split(":")[-1]
 
     # extract success checking function to invoke in the main loop
     success_term = None
