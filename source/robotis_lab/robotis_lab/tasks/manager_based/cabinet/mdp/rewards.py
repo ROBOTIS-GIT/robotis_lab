@@ -94,7 +94,7 @@ def align_grasp_around_handle(env: ManagerBasedRLEnv) -> torch.Tensor:
     rfinger_pos = ee_fingertips_w[..., 1, :]
 
     # Check if hand is in a graspable pose
-    is_graspable = (rfinger_pos[:, 2] > handle_pos[:, 2]) & (lfinger_pos[:, 2] < handle_pos[:, 2])
+    is_graspable = (rfinger_pos[:, 2] < handle_pos[:, 2]) & (lfinger_pos[:, 2] > handle_pos[:, 2])
 
     # bonus if left finger is above the drawer handle and right below
     return is_graspable
@@ -119,7 +119,7 @@ def approach_gripper_handle(env: ManagerBasedRLEnv, offset: float = 0.04) -> tor
     rfinger_dist = torch.abs(rfinger_pos[:, 2] - handle_pos[:, 2])
 
     # Check if hand is in a graspable pose
-    is_graspable = (rfinger_pos[:, 2] > handle_pos[:, 2]) & (lfinger_pos[:, 2] < handle_pos[:, 2])
+    is_graspable = (rfinger_pos[:, 2] < handle_pos[:, 2]) & (lfinger_pos[:, 2] > handle_pos[:, 2])
 
     reward = is_graspable * ((offset - lfinger_dist) + (offset - rfinger_dist))
     # If the reward is negative, set it to zero
