@@ -36,7 +36,7 @@ import math
 
 
 @configclass
-class ObjectTableSceneCfg(SceneCfg):
+class ObjectTableSceneCfg(InteractiveSceneCfg):
     """
     Configuration for the lift scene with a robot and an object.
 
