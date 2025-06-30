@@ -37,7 +37,7 @@ from isaaclab.utils import configclass
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 from isaaclab.utils.noise import AdditiveUniformNoiseCfg as Unoise
 
-import robotis_lab.tasks.manager_based.reach.mdp as mdp
+import robotis_lab.tasks.manager_based.OMY.reach.mdp as mdp
 import math
 ##
 # Scene definition

@@ -22,8 +22,8 @@
 
 from isaaclab.utils import configclass
 
-import robotis_lab.tasks.manager_based.reach.mdp as mdp
-from robotis_lab.tasks.manager_based.reach.reach_env_cfg import ReachEnvCfg
+import robotis_lab.tasks.manager_based.OMY.reach.mdp as mdp
+from robotis_lab.tasks.manager_based.OMY.reach.reach_env_cfg import ReachEnvCfg
 
 ##
 # Pre-defined configs
