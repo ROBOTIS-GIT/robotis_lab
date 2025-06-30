@@ -29,7 +29,7 @@ from robotis_lab.tasks.manager_based.reach.reach_env_cfg import ReachEnvCfg
 ##
 # Pre-defined configs
 ##
-from robotis_lab.assets.open_manipulator_y import OMY_CFG  # isort: skip
+from robotis_lab.assets.OMY import OMY_CFG  # isort: skip
 
 
 ##

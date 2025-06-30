@@ -32,4 +32,4 @@ ROBOTIS_LAB_ASSETS_METADATA = toml.load(os.path.join(ROBOTIS_LAB_ASSETS_EXT_DIR,
 # Configure the module-level variables
 __version__ = ROBOTIS_LAB_ASSETS_METADATA["package"]["version"]
 
-from .open_manipulator_y import *
+from .OMY import *

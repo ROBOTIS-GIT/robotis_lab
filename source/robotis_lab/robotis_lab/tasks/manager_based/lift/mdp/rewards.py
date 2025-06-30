@@ -107,7 +107,7 @@ def object_grasp(
 
 def object_ee_distance(
     env: ManagerBasedRLEnv,
-    std: float = 0.3,  # 표준편차
+    std: float = 0.3,  # standard deviation
     object_cfg: SceneEntityCfg = SceneEntityCfg("object"),
     ee_frame_cfg: SceneEntityCfg = SceneEntityCfg("ee_frame"),
 ) -> torch.Tensor:

@@ -33,7 +33,7 @@ from robotis_lab.tasks.manager_based.cabinet.cabinet_env_cfg import (  # isort: 
 ##
 # Pre-defined configs
 ##
-from robotis_lab.assets.open_manipulator_y import OMY_CFG  # isort: skip
+from robotis_lab.assets.OMY import OMY_CFG  # isort: skip
 
 
 @configclass
@@ -42,10 +42,10 @@ class OMYCabinetEnvCfg(CabinetEnvCfg):
         # post init of parent
         super().__post_init__()
 
-        # Set omy as robot
+        # Set OMY as robot
         self.scene.robot = OMY_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
 
-        # Set Actions for the specific robot type (omy)
+        # Set Actions for the specific robot type (OMY)
         self.actions.arm_action = mdp.JointPositionActionCfg(
             asset_name="robot",
             joint_names=["joint.*"],
@@ -63,26 +63,26 @@ class OMYCabinetEnvCfg(CabinetEnvCfg):
         # IMPORTANT: The order of the frames in the list is important. The first frame is the tool center point (TCP)
         # the other frames are the fingers
         self.scene.ee_frame = FrameTransformerCfg(
-            prim_path="{ENV_REGEX_NS}/Robot/open_manipulator_y/world",
+            prim_path="{ENV_REGEX_NS}/Robot/OMY/world",
             debug_vis=False,
             visualizer_cfg=FRAME_MARKER_SMALL_CFG.replace(prim_path="/Visuals/EndEffectorFrameTransformer"),
             target_frames=[
                 FrameTransformerCfg.FrameCfg(
-                    prim_path="{ENV_REGEX_NS}/Robot/open_manipulator_y/link6",
+                    prim_path="{ENV_REGEX_NS}/Robot/OMY/link6",
                     name="end_effector",
                     offset=OffsetCfg(
                         pos=(0.0, -0.248, 0.0),
                     ),
                 ),
                 FrameTransformerCfg.FrameCfg(
-                    prim_path="{ENV_REGEX_NS}/Robot/open_manipulator_y/rh_p12_rn_l2",
+                    prim_path="{ENV_REGEX_NS}/Robot/OMY/rh_p12_rn_l2",
                     name="tool_leftfinger",
                     offset=OffsetCfg(
                         pos=(0.0, 0.0, 0.0),
                     ),
                 ),
                 FrameTransformerCfg.FrameCfg(
-                    prim_path="{ENV_REGEX_NS}/Robot/open_manipulator_y/rh_p12_rn_r2",
+                    prim_path="{ENV_REGEX_NS}/Robot/OMY/rh_p12_rn_r2",
                     name="tool_rightfinger",
                     offset=OffsetCfg(
                         pos=(0.0, 0.0, 0.0),

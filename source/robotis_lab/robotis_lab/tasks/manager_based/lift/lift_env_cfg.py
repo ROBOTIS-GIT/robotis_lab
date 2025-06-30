@@ -256,7 +256,6 @@ class LiftEnvCfg(ManagerBasedRLEnvCfg):
         self.sim.dt = 0.01  # 100Hz
         self.sim.render_interval = self.decimation
 
-        self.sim.physx.bounce_threshold_velocity = 0.2
         self.sim.physx.bounce_threshold_velocity = 0.01
         self.sim.physx.gpu_found_lost_aggregate_pairs_capacity = 1024 * 1024 * 4
         self.sim.physx.gpu_total_aggregate_pairs_capacity = 16 * 1024

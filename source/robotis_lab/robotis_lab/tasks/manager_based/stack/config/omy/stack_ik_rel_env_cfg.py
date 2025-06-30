@@ -28,7 +28,7 @@ from . import stack_joint_pos_env_cfg
 ##
 # Pre-defined configs
 ##
-from robotis_lab.assets.open_manipulator_y import OMY_CFG  # isort: skip
+from robotis_lab.assets.OMY import OMY_CFG  # isort: skip
 
 
 @configclass

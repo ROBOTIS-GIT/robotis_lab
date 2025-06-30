@@ -28,7 +28,7 @@ from . import joint_pos_env_cfg
 ##
 # Pre-defined configs
 ##
-from robotis_lab.assets.open_manipulator_y import OMY_CFG  # isort: skip
+from robotis_lab.assets.OMY import OMY_CFG  # isort: skip
 
 
 @configclass
@@ -41,7 +41,7 @@ class OMYCabinetEnvCfg(joint_pos_env_cfg.OMYCabinetEnvCfg):
         # We switch here to a stiffer PD controller for IK tracking to be better.
         self.scene.robot = OMY_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
 
-        # Set actions for the specific robot type (omy)
+        # Set actions for the specific robot type (OMY)
         self.actions.arm_action = DifferentialInverseKinematicsActionCfg(
             asset_name="robot",
             joint_names=["joint[1-6]"],
