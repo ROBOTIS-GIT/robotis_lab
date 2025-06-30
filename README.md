@@ -113,7 +113,7 @@ python scripts/imitation_learning/robomimic/train.py \
 --dataset ./datasets/generated_dataset.hdf5
 
 # Play
-python -p scripts/imitation_learning/robomimic/play.py \
+python scripts/imitation_learning/robomimic/play.py \
 --device cuda --task RobotisLab-Stack-Cube-OMY-IK-Rel-v0 --num_rollouts 50 \
 --checkpoint /PATH/TO/desired_model_checkpoint.pth
 ```
