@@ -29,9 +29,9 @@ from isaaclab.sim.spawners.from_files.from_files_cfg import UsdFileCfg
 from isaaclab.utils import configclass
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 
-from robotis_lab.tasks.manager_based.stack import mdp
-from robotis_lab.tasks.manager_based.stack.mdp import omy_stack_events
-from robotis_lab.tasks.manager_based.stack.stack_env_cfg import StackEnvCfg
+from robotis_lab.tasks.manager_based.OMY.stack import mdp
+from robotis_lab.tasks.manager_based.OMY.stack.mdp import omy_stack_events
+from robotis_lab.tasks.manager_based.OMY.stack.stack_env_cfg import StackEnvCfg
 
 ##
 # Pre-defined configs

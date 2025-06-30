@@ -27,9 +27,9 @@ from isaaclab.sim.schemas.schemas_cfg import RigidBodyPropertiesCfg
 from isaaclab.utils import configclass
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 
-from robotis_lab.tasks.manager_based.lift import mdp
+from robotis_lab.tasks.manager_based.OMY.lift import mdp
 
-from robotis_lab.tasks.manager_based.lift.lift_env_cfg import LiftEnvCfg
+from robotis_lab.tasks.manager_based.OMY.lift.lift_env_cfg import LiftEnvCfg
 
 ##
 # Pre-defined configs

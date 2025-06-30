@@ -23,9 +23,9 @@ from isaaclab.sensors import FrameTransformerCfg
 from isaaclab.sensors.frame_transformer.frame_transformer_cfg import OffsetCfg
 from isaaclab.utils import configclass
 
-from robotis_lab.tasks.manager_based.cabinet import mdp
+from robotis_lab.tasks.manager_based.OMY.cabinet import mdp
 
-from robotis_lab.tasks.manager_based.cabinet.cabinet_env_cfg import (  # isort: skip
+from robotis_lab.tasks.manager_based.OMY.cabinet.cabinet_env_cfg import (  # isort: skip
     FRAME_MARKER_SMALL_CFG,
     CabinetEnvCfg,
 )
