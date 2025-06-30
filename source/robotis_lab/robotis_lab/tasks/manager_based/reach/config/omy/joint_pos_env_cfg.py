@@ -19,7 +19,6 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
-import math
 
 from isaaclab.utils import configclass
 
@@ -29,7 +28,7 @@ from robotis_lab.tasks.manager_based.reach.reach_env_cfg import ReachEnvCfg
 ##
 # Pre-defined configs
 ##
-from robotis_lab.assets.open_manipulator_y import OMY_CFG  # isort: skip
+from robotis_lab.assets.OMY import OMY_CFG  # isort: skip
 
 
 ##
@@ -58,6 +57,7 @@ class OMYReachEnvCfg(ReachEnvCfg):
         # override command generator body
         # end-effector is along x-direction
         self.commands.ee_pose.body_name = "link6"
+
 
 @configclass
 class OMYReachEnvCfg_PLAY(OMYReachEnvCfg):

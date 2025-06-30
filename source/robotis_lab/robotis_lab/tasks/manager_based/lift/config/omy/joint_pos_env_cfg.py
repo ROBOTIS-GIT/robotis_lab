@@ -24,7 +24,6 @@ from isaaclab.assets import RigidObjectCfg
 from isaaclab.sensors import FrameTransformerCfg
 from isaaclab.sensors.frame_transformer.frame_transformer_cfg import OffsetCfg
 from isaaclab.sim.schemas.schemas_cfg import RigidBodyPropertiesCfg
-from isaaclab.sim.spawners.from_files.from_files_cfg import UsdFileCfg
 from isaaclab.utils import configclass
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 
@@ -35,8 +34,7 @@ from robotis_lab.tasks.manager_based.lift.lift_env_cfg import LiftEnvCfg
 ##
 # Pre-defined configs
 ##
-from isaaclab.markers.config import FRAME_MARKER_CFG  # isort: skip
-from robotis_lab.assets.open_manipulator_y import OMY_LIFT_CFG  # isort: skip
+from robotis_lab.assets.OMY import OMY_LIFT_CFG  # isort: skip
 
 
 @configclass
@@ -48,7 +46,7 @@ class OMYCubeLiftEnvCfg(LiftEnvCfg):
         # Set OMY as robot
         self.scene.robot = OMY_LIFT_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
 
-        # Set actions for the specific robot type (omy)
+        # Set actions for the specific robot type (OMY)
         self.actions.arm_action = mdp.JointPositionActionCfg(
             asset_name="robot",
             joint_names=["joint.*"],
@@ -87,12 +85,12 @@ class OMYCubeLiftEnvCfg(LiftEnvCfg):
         # marker_cfg.markers["frame"].scale = (0.1, 0.1, 0.1)
         # marker_cfg.prim_path = "/Visuals/FrameTransformer"
         self.scene.ee_frame = FrameTransformerCfg(
-            prim_path="{ENV_REGEX_NS}/Robot/open_manipulator_y/world",
+            prim_path="{ENV_REGEX_NS}/Robot/OMY/world",
             debug_vis=False,
             # visualizer_cfg=marker_cfg,
             target_frames=[
                 FrameTransformerCfg.FrameCfg(
-                    prim_path="{ENV_REGEX_NS}/Robot/open_manipulator_y/link6",
+                    prim_path="{ENV_REGEX_NS}/Robot/OMY/link6",
                     name="end_effector",
                     offset=OffsetCfg(
                         pos=[0.0, -0.243, 0.0],

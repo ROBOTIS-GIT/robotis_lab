@@ -37,7 +37,7 @@ from robotis_lab.tasks.manager_based.stack.stack_env_cfg import StackEnvCfg
 # Pre-defined configs
 ##
 from isaaclab.markers.config import FRAME_MARKER_CFG  # isort: skip
-from robotis_lab.assets.open_manipulator_y import OMY_CFG  # isort: skip
+from robotis_lab.assets.OMY import OMY_CFG  # isort: skip
 
 
 @configclass
@@ -150,26 +150,26 @@ class OMYCubeStackEnvCfg(StackEnvCfg):
         marker_cfg.markers["frame"].scale = (0.1, 0.1, 0.1)
         marker_cfg.prim_path = "/Visuals/FrameTransformer"
         self.scene.ee_frame = FrameTransformerCfg(
-            prim_path="{ENV_REGEX_NS}/Robot/open_manipulator_y/world",
+            prim_path="{ENV_REGEX_NS}/Robot/OMY/world",
             debug_vis=False,
             visualizer_cfg=marker_cfg,
             target_frames=[
                 FrameTransformerCfg.FrameCfg(
-                    prim_path="{ENV_REGEX_NS}/Robot/open_manipulator_y/link6",
+                    prim_path="{ENV_REGEX_NS}/Robot/OMY/link6",
                     name="end_effector",
                     offset=OffsetCfg(
                         pos=[0.0, -0.248, 0.0],
                     ),
                 ),
                 FrameTransformerCfg.FrameCfg(
-                    prim_path="{ENV_REGEX_NS}/Robot/open_manipulator_y/rh_p12_rn_r2",
+                    prim_path="{ENV_REGEX_NS}/Robot/OMY/rh_p12_rn_r2",
                     name="tool_rightfinger",
                     offset=OffsetCfg(
                         pos=(0.0, 0.0, 0.0),
                     ),
                 ),
                 FrameTransformerCfg.FrameCfg(
-                    prim_path="{ENV_REGEX_NS}/Robot/open_manipulator_y/rh_p12_rn_l2",
+                    prim_path="{ENV_REGEX_NS}/Robot/OMY/rh_p12_rn_l2",
                     name="tool_leftfinger",
                     offset=OffsetCfg(
                         pos=(0.0, 0.0, 0.0),

@@ -39,7 +39,6 @@ from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 
 from . import mdp
 
-import math
 
 ##
 # Scene definition
@@ -167,7 +166,6 @@ class RewardsCfg:
         weight=15.0,
     )
 
-
     object_grasped = RewTerm(
         func=mdp.object_grasp,
         params={
@@ -256,7 +254,6 @@ class LiftEnvCfg(ManagerBasedRLEnvCfg):
         self.sim.dt = 0.01  # 100Hz
         self.sim.render_interval = self.decimation
 
-        self.sim.physx.bounce_threshold_velocity = 0.2
         self.sim.physx.bounce_threshold_velocity = 0.01
         self.sim.physx.gpu_found_lost_aggregate_pairs_capacity = 1024 * 1024 * 4
         self.sim.physx.gpu_total_aggregate_pairs_capacity = 16 * 1024
