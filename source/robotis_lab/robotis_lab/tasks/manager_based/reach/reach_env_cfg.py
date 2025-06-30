@@ -91,9 +91,9 @@ class CommandsCfg:
             pos_x=(0.25, 0.55),
             pos_y=(-0.2, 0.2),
             pos_z=(0.2, 0.4),
-            roll=(math.pi/2 - math.pi/8, math.pi/2 + math.pi/8),
-            pitch=(- math.pi/8, math.pi/8),
-            yaw=(math.pi/2 - math.pi/8, math.pi/2 + math.pi/8),
+            roll=(math.pi / 2 - math.pi / 8, math.pi / 2 + math.pi / 8),
+            pitch=(- math.pi / 8, math.pi / 8),
+            yaw=(math.pi / 2 - math.pi / 8, math.pi / 2 + math.pi / 8),
         ),
     )
 

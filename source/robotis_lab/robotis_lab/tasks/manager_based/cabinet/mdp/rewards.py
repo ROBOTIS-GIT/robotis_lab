@@ -77,9 +77,9 @@ def align_ee_handle(env: ManagerBasedRLEnv) -> torch.Tensor:
     handle_mat = matrix_from_quat(handle_quat)
 
     # get current x and y direction of the handle
-    handle_x, handle_y, handle_z = handle_mat[..., 0], handle_mat[..., 1], handle_mat[..., 2]
+    handle_x, handle_y = handle_mat[..., 0], handle_mat[..., 1], handle_mat[..., 2]
     # get current y and z direction of the gripper
-    end_effector_x, end_effector_y, end_effector_z = end_effector_rot_mat[..., 0], end_effector_rot_mat[..., 1], end_effector_rot_mat[..., 2]
+    end_effector_x, end_effector_z = end_effector_rot_mat[..., 0], end_effector_rot_mat[..., 1], end_effector_rot_mat[..., 2]
 
     # make sure gripper aligns with the handle
     # in this case, the z direction of the gripper should be close to the -x direction of the handle

@@ -19,7 +19,6 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
-import math
 
 from isaaclab.utils import configclass
 
@@ -58,6 +57,7 @@ class OMYReachEnvCfg(ReachEnvCfg):
         # override command generator body
         # end-effector is along x-direction
         self.commands.ee_pose.body_name = "link6"
+
 
 @configclass
 class OMYReachEnvCfg_PLAY(OMYReachEnvCfg):

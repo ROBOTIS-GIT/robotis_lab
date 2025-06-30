@@ -70,6 +70,7 @@ def object_is_lifted(
 
     return reward
 
+
 def object_grasp(
     env: ManagerBasedRLEnv,
     robot_cfg: SceneEntityCfg,
@@ -104,6 +105,7 @@ def object_grasp(
     # print(f"object grasp reward: {is_grasped.float()}")
 
     return is_grasped.float()
+
 
 def object_ee_distance(
     env: ManagerBasedRLEnv,

@@ -39,7 +39,6 @@ from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 
 from . import mdp
 
-import math
 
 ##
 # Scene definition
@@ -166,7 +165,6 @@ class RewardsCfg:
         },
         weight=15.0,
     )
-
 
     object_grasped = RewTerm(
         func=mdp.object_grasp,
