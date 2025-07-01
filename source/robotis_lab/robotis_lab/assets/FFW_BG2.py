@@ -20,9 +20,9 @@ from isaaclab.actuators import ImplicitActuatorCfg
 
 from robotis_lab.assets import ROBOTIS_LAB_ASSETS_DATA_DIR
 
-FFW_SG2_CFG = ArticulationCfg(
+FFW_BG2_CFG = ArticulationCfg(
     spawn=UsdFileCfg(
-        usd_path=f"{ROBOTIS_LAB_ASSETS_DATA_DIR}/robots/FFW/FFW_SG2.usd",
+        usd_path=f"{ROBOTIS_LAB_ASSETS_DATA_DIR}/robots/FFW/FFW_BG2.usd",
         rigid_props=RigidBodyPropertiesCfg(
             disable_gravity=False,
             max_depenetration_velocity=5.0,
@@ -36,11 +36,6 @@ FFW_SG2_CFG = ArticulationCfg(
     ),
     init_state=ArticulationCfg.InitialStateCfg(
         joint_pos={
-            # Swerve base joints
-            "left_wheel_drive": 0.0, "left_wheel_steer": 0.0,
-            "right_wheel_drive": 0.0, "right_wheel_steer": 0.0,
-            "rear_wheel_drive": 0.0, "rear_wheel_steer": 0.0,
-
             # Lift joint
             "lift_joint": 0.0,
 
@@ -54,24 +49,10 @@ FFW_SG2_CFG = ArticulationCfg(
             **{f"gripper_r_joint{i+1}": 0.0 for i in range(4)},
 
             # Head joints
-            "head_joint1": 0.0,
-            "head_joint2": 0.0,
+            **{f"head_joint{i+1}": 0.0 for i in range(2)},
         },
     ),
     actuators={
-        # Actuators for swerve base
-        "base": ImplicitActuatorCfg(
-            joint_names_expr=[
-                "left_wheel_drive", "left_wheel_steer",
-                "right_wheel_drive", "right_wheel_steer",
-                "rear_wheel_drive", "rear_wheel_steer",
-            ],
-            velocity_limit_sim=30.0,
-            effort_limit_sim=100000.0,
-            stiffness=10000.0,
-            damping=100.0,
-        ),
-
         # Actuator for vertical lift joint
         "lift": ImplicitActuatorCfg(
             joint_names_expr=["lift_joint"],

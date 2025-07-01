@@ -40,7 +40,7 @@ params:
   load_path: '' # path to the checkpoint to load
 
   config:
-    name: reach_ffw_sg2
+    name: reach_ffw_bg2
     env_name: rlgpu
     device: 'cuda:0'
     device_name: 'cuda:0'

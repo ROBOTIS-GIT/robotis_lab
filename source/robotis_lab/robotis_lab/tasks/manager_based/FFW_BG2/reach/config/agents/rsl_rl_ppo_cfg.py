@@ -25,11 +25,11 @@ from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlPpoActorCriticCfg, R
 
 
 @configclass
-class FFWSG2ReachPPORunnerCfg(RslRlOnPolicyRunnerCfg):
+class FFWBG2ReachPPORunnerCfg(RslRlOnPolicyRunnerCfg):
     num_steps_per_env = 24
     max_iterations = 1000
     save_interval = 50
-    experiment_name = "reach_ffw_sg2"
+    experiment_name = "reach_ffw_bg2"
     run_name = ""
     resume = False
     empirical_normalization = False
