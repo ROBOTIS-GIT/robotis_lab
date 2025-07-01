@@ -25,6 +25,7 @@ import robotis_lab.tasks.manager_based.FFW_BG2.reach.mdp as mdp
 from robotis_lab.tasks.manager_based.FFW_BG2.reach.reach_env_cfg import ReachEnvCfg
 from robotis_lab.assets.FFW_BG2 import FFW_BG2_CFG  # isort: skip
 
+
 @configclass
 class FFWBG2ReachEnvCfg(ReachEnvCfg):
     def __post_init__(self):

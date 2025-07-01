@@ -24,7 +24,6 @@ from dataclasses import MISSING
 import isaaclab.sim as sim_utils
 from isaaclab.assets import ArticulationCfg, AssetBaseCfg
 from isaaclab.envs import ManagerBasedRLEnvCfg
-from isaaclab.managers import ActionTermCfg as ActionTerm
 from isaaclab.managers import CurriculumTermCfg as CurrTerm
 from isaaclab.managers import EventTermCfg as EventTerm
 from isaaclab.managers import ObservationGroupCfg as ObsGroup
@@ -37,8 +36,8 @@ from isaaclab.utils import configclass
 from isaaclab.utils.noise import AdditiveUniformNoiseCfg as Unoise
 
 import robotis_lab.tasks.manager_based.FFW_BG2.reach.mdp as mdp
-from robotis_lab.assets.FFW_BG2 import FFW_BG2_CFG
 import math
+
 
 @configclass
 class ReachSceneCfg(InteractiveSceneCfg):
@@ -56,6 +55,7 @@ class ReachSceneCfg(InteractiveSceneCfg):
         prim_path="/World/light",
         spawn=sim_utils.DomeLightCfg(color=(0.75, 0.75, 0.75), intensity=2500.0),
     )
+
 
 @configclass
 class CommandsCfg:
@@ -88,6 +88,7 @@ class CommandsCfg:
         ),
     )
 
+
 @configclass
 class ActionsCfg:
     """Action configuration with base velocity and joint position actions."""
@@ -95,6 +96,7 @@ class ActionsCfg:
     lift_action: mdp.JointPositionActionCfg = MISSING
     arm_l_action: mdp.JointPositionActionCfg = MISSING
     arm_r_action: mdp.JointPositionActionCfg = MISSING
+
 
 @configclass
 class ObservationsCfg:
@@ -114,6 +116,7 @@ class ObservationsCfg:
 
     policy: PolicyCfg = PolicyCfg()
 
+
 @configclass
 class EventCfg:
     """Reset event configuration."""
@@ -126,6 +129,7 @@ class EventCfg:
             "velocity_range": (0.0, 0.0),
         },
     )
+
 
 @configclass
 class RewardsCfg:
@@ -172,11 +176,13 @@ class RewardsCfg:
         params={"asset_cfg": SceneEntityCfg("robot")},
     )
 
+
 @configclass
 class TerminationsCfg:
     """Episode termination conditions."""
 
     time_out = DoneTerm(func=mdp.time_out, time_out=True)
+
 
 @configclass
 class CurriculumCfg:
@@ -188,6 +194,7 @@ class CurriculumCfg:
     joint_vel = CurrTerm(
         func=mdp.modify_reward_weight, params={"term_name": "joint_vel", "weight": -0.001, "num_steps": 1000}
     )
+
 
 @configclass
 class ReachEnvCfg(ManagerBasedRLEnvCfg):
