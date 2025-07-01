@@ -62,7 +62,7 @@ class CommandsCfg:
     ee_pose_l = mdp.UniformPoseCommandCfg(
         asset_name="robot",
         body_name=MISSING,
-        resampling_time_range=(3.0, 6.0),
+        resampling_time_range=(2.0, 4.0),
         debug_vis=True,
         ranges=mdp.UniformPoseCommandCfg.Ranges(
             pos_x=(0.45, 0.65),
@@ -76,7 +76,7 @@ class CommandsCfg:
     ee_pose_r = mdp.UniformPoseCommandCfg(
         asset_name="robot",
         body_name=MISSING,
-        resampling_time_range=(3.0, 6.0),
+        resampling_time_range=(2.0, 4.0),
         debug_vis=True,
         ranges=mdp.UniformPoseCommandCfg.Ranges(
             pos_x=(0.5, 0.7),
