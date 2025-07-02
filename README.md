@@ -79,8 +79,7 @@ python scripts/reinforcement_learning/skrl/train.py --task RobotisLab-Lift-Cube-
 
 # Play
 python scripts/reinforcement_learning/skrl/play.py --task RobotisLab-Lift-Cube-OMY-v0 --num_envs=16
-```![ISAAC_FFW_RL_reach_train (1)](https://github.com/user-attachments/assets/e57b5707-de52-4c91-9369-3045b21a33d0)
-
+```
 
 OMY Open drawer task
 
