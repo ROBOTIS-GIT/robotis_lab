@@ -39,7 +39,7 @@ This project provides simulation environments, configuration tools, and task def
   ```
 
 ## Try examples
-![OpenManipulatorY-in-IsaacSIm11_RL6_-_online-video-cutter com_](https://github.com/user-attachments/assets/af129f58-8c2a-40fc-a2b2-aabe164579da)
+![ISAAC_FFW_RL_reach_train (1)](https://github.com/user-attachments/assets/679ce5ce-eef9-4f55-bc03-55f41ca77af9)
 
 > [!NOTE]
 > If you want to control a **SINGLE ROBOT** with the keyboard during playback, add `--keyboard` at the end of the play script.
@@ -79,7 +79,8 @@ python scripts/reinforcement_learning/skrl/train.py --task RobotisLab-Lift-Cube-
 
 # Play
 python scripts/reinforcement_learning/skrl/play.py --task RobotisLab-Lift-Cube-OMY-v0 --num_envs=16
-```
+```![ISAAC_FFW_RL_reach_train (1)](https://github.com/user-attachments/assets/e57b5707-de52-4c91-9369-3045b21a33d0)
+
 
 OMY Open drawer task
 
@@ -88,7 +89,17 @@ OMY Open drawer task
 python scripts/reinforcement_learning/skrl/train.py --task RobotisLab-Open-Drawer-OMY-v0 --num_envs=512 --headless
 
 # Play
-python scripts/reinforcement_learning/skrl/play.py --task RobotisLab-Open-Drawer-OMY-v0 --num_envs=4
+python scripts/reinforcement_learning/skrl/play.py --task RobotisLab-Open-Drawer-OMY-v0 --num_envs=16
+```
+
+FFW-BG2 reach task
+
+```bash
+# Train
+python scripts/reinforcement_learning/skrl/train.py --task RobotisLab-Reach-FFW-BG2-v0 --num_envs=512 --headless
+
+# Play
+python scripts/reinforcement_learning/skrl/play.py --task RobotisLab-Reach-FFW-BG2-v0 --num_envs=16
 ```
 
 ### Imitation learning
