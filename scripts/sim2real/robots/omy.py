@@ -37,13 +37,13 @@ class OMYReachPolicy(PolicyController):
         ]
         # Load the pre-trained policy model and environment configuration
         repo_root = Path(__file__).resolve().parents[3]
-        model_dir = repo_root / "logs/rsl_rl/reach_omy/2025-07-07_08-47-35"
+        model_dir = repo_root / "logs/rsl_rl/reach_omy/2025-07-08_06-25-57"
         self.load_policy(
             model_dir / "exported/policy.pt",
             model_dir / "params/env.yaml",
         )
 
-        self._action_scale = 1.0
+        self._action_scale = 0.5
         self._previous_action = np.zeros(6)
         self._policy_counter = 0
         self.target_command = np.array([0.5, 0.0, 0.2, 0.7071, 0.0, 0.7071, 0.0])

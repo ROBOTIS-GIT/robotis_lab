@@ -121,7 +121,7 @@ class ReachPolicy(Node):
         # Position range
         pos_x = np.random.uniform(0.25, 0.55)
         pos_y = np.random.uniform(-0.2, 0.2)
-        pos_z = np.random.uniform(0.2, 0.4)
+        pos_z = np.random.uniform(0.3, 0.5)
 
         # Orientation range (in radians)
         roll  = np.random.uniform(math.pi / 2 - math.pi / 8, math.pi / 2 + math.pi / 8)
@@ -133,36 +133,15 @@ class ReachPolicy(Node):
 
         # Return full 7D pose: position + quaternion
         return np.array([pos_x, pos_y, pos_z, quat[0], quat[1], quat[2], quat[3]])
-    
-    def fixed_pose(self) -> np.ndarray:
-        """
-        Returns a fixed pose for the robot.
-        This is a placeholder function that can be modified to return a specific pose.
-        """
-        pos_x = 0.4
-        pos_y = 0.0
-        pos_z = 0.3
 
-        # Orientation range (in radians)
-        roll  = math.pi / 2
-        pitch = 0.0
-        yaw   = math.pi / 2
-
-        # Convert to quaternion
-        quat = Rotation.from_euler("xyz", [roll, pitch, yaw]).as_quat()  # [x, y, z, w]
-
-        # Return full 7D pose: position + quaternion
-        return np.array([pos_x, pos_y, pos_z, quat[0], quat[1], quat[2], quat[3]])
 
     def step_callback(self):
         """
         Timer callback to compute and publish the next joint trajectory command.
         """
         # Set a constant target command for the robot (example values)
-        # if self.i % 500 == 0:
-        #     self.target_command = self.sample_random_pose()
-
-        self.target_command = self.fixed_pose()
+        if self.i % 500 == 0:
+            self.target_command = self.sample_random_pose()
 
         # Get simulation joint positions from the robot's forward model
         joint_pos = self.robot.forward(self.step_size, self.target_command)
@@ -175,8 +154,8 @@ class ReachPolicy(Node):
             traj.joint_names = self.JOINT_NAMES
 
             point = JointTrajectoryPoint()
-            point.positions = joint_pos.tolist()
-            point.time_from_start = Duration(sec=1, nanosec=0)  # Temps pour atteindre la position
+            point.positions = joint_pos
+            point.time_from_start = Duration(sec=0, nanosec=50000000)  # Temps pour atteindre la position
 
             traj.points.append(point)
             
