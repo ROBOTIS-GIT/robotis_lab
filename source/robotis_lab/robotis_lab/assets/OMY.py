@@ -52,7 +52,7 @@ OMY_CFG = ArticulationCfg(
         "arm": ImplicitActuatorCfg(
             joint_names_expr=["joint[1-6]"],
             velocity_limit=100.0,
-            effort_limit=1000.0,
+            effort_limit=10000.0,
             stiffness=400.0,
             damping=80.0,
         ),
