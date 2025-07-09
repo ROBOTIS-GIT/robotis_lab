@@ -23,6 +23,8 @@ from isaaclab.utils import configclass
 
 import robotis_lab.tasks.manager_based.FFW_BG2.reach.mdp as mdp
 from robotis_lab.tasks.manager_based.FFW_BG2.reach.reach_env_cfg import ReachEnvCfg
+from isaaclab.managers import SceneEntityCfg
+
 from robotis_lab.assets.FFW_BG2 import FFW_BG2_CFG  # isort: skip
 
 
@@ -52,7 +54,7 @@ class FFWBG2ReachEnvCfg(ReachEnvCfg):
         self.actions.lift_action = mdp.JointPositionActionCfg(
             asset_name="robot",
             joint_names=["lift_joint"],
-            scale=1.0,
+            scale=0.5,
         )
         self.actions.arm_l_action = mdp.JointPositionActionCfg(
             asset_name="robot",
@@ -63,6 +65,13 @@ class FFWBG2ReachEnvCfg(ReachEnvCfg):
             asset_name="robot",
             joint_names=["arm_r_joint[1-7]"],
             scale=0.5,
+        )
+        # Observation policy configuration
+        self.observations.policy.joint_pos.params["asset_cfg"] = SceneEntityCfg(
+            name="robot", joint_names=["arm_l_joint[1-7]", "arm_r_joint[1-7]", "lift_joint"]
+        )
+        self.observations.policy.joint_vel.params["asset_cfg"] = SceneEntityCfg(
+            name="robot", joint_names=["arm_l_joint[1-7]", "arm_r_joint[1-7]", "lift_joint"]
         )
 
         self.commands.ee_pose_l.body_name = ee_link_l

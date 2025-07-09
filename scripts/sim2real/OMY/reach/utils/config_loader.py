@@ -224,3 +224,15 @@ def get_physics_properties(data: dict) -> dict:
         tuple: A tuple containing the decimation, dt, and render interval.
     """
     return data.get("decimation"), data.get("sim").get("dt"), data.get("sim").get("render_interval")
+
+def get_action_scale(data: dict) -> float:
+    """
+    Gets the action scale from the environment configuration data.
+
+    Args:
+        data (dict): The environment configuration data.
+
+    Returns:
+        float: The action scale.
+    """
+    return data.get("actions").get("arm_action").get("scale", 0.5)

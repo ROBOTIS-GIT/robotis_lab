@@ -24,7 +24,7 @@ import io
 import numpy as np
 import torch
 
-from .config_loader import parse_env_config, get_physics_properties, get_robot_joint_properties
+from .config_loader import parse_env_config, get_physics_properties, get_robot_joint_properties, get_action_scale
 
 class PolicyExecutor:
     """A controller that loads and executes a policy from a file."""
@@ -53,30 +53,34 @@ class PolicyExecutor:
         self.policy = torch.jit.load(file)
         self.policy_env_params = parse_env_config(policy_env_path)
 
-        self._decimation, self._dt, self.render_interval = get_physics_properties(self.policy_env_params)
+        self.decimation, self.dt, self.render_interval = get_physics_properties(self.policy_env_params)
 
         print("\n--- Physics properties ---")
-        print(f"{'Decimation:':<18} {self._decimation}")
-        print(f"{'Timestep (dt):':<18} {self._dt}")
+        print(f"{'Decimation:':<18} {self.decimation}")
+        print(f"{'Timestep (dt):':<18} {self.dt}")
         print(f"{'Render interval:':<18} {self.render_interval}")
 
-        self._max_effort, self._max_vel, self._stiffness, self._damping, self.default_pos, self.default_vel = get_robot_joint_properties(
+        self.action_scale = get_action_scale(self.policy_env_params)
+
+        print(f"{'Action scale:':<18} {self.action_scale}")
+
+        self.max_effort, self.max_vel, self.stiffness, self.damping, self.default_pos, self.default_vel = get_robot_joint_properties(
             self.policy_env_params, self.dof_names
         )
         self.num_joints = len(self.dof_names)
 
         print("\n--- Robot joint properties ---")
         print(f"{'Number of joints:':<18} {self.num_joints}")
-        print(f"{'Max effort:':<18} {self._max_effort}")
-        print(f"{'Max velocity:':<18} {self._max_vel}")
-        print(f"{'Stifness:':<18} {self._stiffness}")
-        print(f"{'Damping:':<18} {self._damping}")
+        print(f"{'Max effort:':<18} {self.max_effort}")
+        print(f"{'Max velocity:':<18} {self.max_vel}")
+        print(f"{'Stifness:':<18} {self.stiffness}")
+        print(f"{'Damping:':<18} {self.damping}")
         print(f"{'Default position:':<18} {self.default_pos}")
         print(f"{'Default velocity:':<18} {self.default_vel}")
 
         print("\n=== Policy Loaded ===\n")
 
-    def _compute_action(self, obs: np.ndarray) -> np.ndarray:
+    def compute_action(self, obs: np.ndarray) -> np.ndarray:
         """
         Computes the action from the observation using the loaded policy.
 
@@ -92,7 +96,7 @@ class PolicyExecutor:
             action = self.policy(obs).detach().view(-1).numpy()
         return action
 
-    def _compute_observation(self) -> NotImplementedError:
+    def compute_observation(self) -> NotImplementedError:
         """Build an observation, must be overridden."""
 
         raise NotImplementedError(

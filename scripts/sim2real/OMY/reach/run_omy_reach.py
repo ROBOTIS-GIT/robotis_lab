@@ -1,7 +1,23 @@
 #!/usr/bin/env python3
 
 # Copyright 2025 ROBOTIS CO., LTD.
-# Licensed under the Apache License, Version 2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# Author: Taehyeong Kim
+
+# Modified from original code by Louis Le Lay
+# Original source: https://github.com/louislelay/kinova_isaaclab_sim2real
 
 import math
 import numpy as np
@@ -25,16 +41,14 @@ class OMYReachPolicy(PolicyExecutor):
         self.dof_names = [f"joint{i}" for i in range(1, 7)]
 
         repo_root = Path(__file__).resolve().parents[4]
-        model_dir = repo_root / "logs/rsl_rl/reach_omy/2025-07-08_06-25-57"
+        model_dir = repo_root / "logs/rsl_rl/reach_omy/2025-07-09_05-26-54"
 
         self.load_policy(
             model_dir / "exported/policy.pt",
             model_dir / "params/env.yaml",
         )
 
-        self.debug = False
-
-        self._action_scale = 0.5
+        self.debug = True
 
         self.has_joint_data = False
         self.previous_action = np.zeros(6)
@@ -65,9 +79,9 @@ class OMYReachPolicy(PolicyExecutor):
         if obs is None:
             return None
 
-        self.action = self._compute_action(obs)
+        self.action = self.compute_action(obs)
         self.previous_action = self.action.copy()
-        joint_positions = self.default_pos + (self.action * self._action_scale)
+        joint_positions = self.default_pos + (self.action * self.action_scale)
 
         # Debug Logging
         if self.debug:  # Change to True to enable debug print
@@ -90,31 +104,31 @@ class ReachPolicy(Node):
 
         self.robot = OMYReachPolicy()
         self.target_command = np.zeros(6)
-        self.step_size = 1.0 / 100  # 100Hz
+        self.step_size = 1.0 / 200  # 100Hz
         self.timer = self.create_timer(self.step_size, self.step_callback)
         self.iteration = 0
 
         self.create_subscription(
             JointTrajectoryControllerState,
             '/arm_controller/controller_state',
-            self.sub_callback,
+            self.joint_state_callback,
             10
         )
 
         self.pub = self.create_publisher(
             JointTrajectory, '/arm_controller/joint_trajectory', 10
         )
-        self.min_traj_dur = 0.05  # in seconds
+        self.trajectory_time_from_start = 0.1  # in seconds
 
         self.joint_names = [f"joint{i}" for i in range(1, 7)]
 
         self.get_logger().info("ReachPolicy node initialized.")
 
-    def sub_callback(self, msg: JointTrajectoryControllerState):
+    def joint_state_callback(self, msg: JointTrajectoryControllerState):
         self.robot.update_joint_state(msg.feedback.positions, msg.feedback.velocities)
 
     def sample_random_pose(self) -> np.ndarray:
-        pos = np.random.uniform([0.25, -0.2, 0.3], [0.55, 0.2, 0.5])
+        pos = np.random.uniform([0.25, -0.2, 0.4], [0.55, 0.2, 0.55])
         euler = np.random.uniform(
             [math.pi/2 - math.pi/8, -math.pi/8, math.pi/2 - math.pi/8],
             [math.pi/2 + math.pi/8, math.pi/8, math.pi/2 + math.pi/8]
@@ -123,18 +137,20 @@ class ReachPolicy(Node):
         return np.concatenate([pos, quat])
 
     def create_trajectory_command(self, joint_pos: np.ndarray) -> JointTrajectory:
-        traj = JointTrajectory()
-        traj.joint_names = self.joint_names
+        trajectory_cmd = JointTrajectory()
+        trajectory_cmd.joint_names = self.joint_names
 
         point = JointTrajectoryPoint()
         point.positions = joint_pos
-        point.time_from_start = Duration(sec=0, nanosec=int(self.min_traj_dur * 1e9))
-        traj.points.append(point)
-        return traj
+        point.time_from_start = Duration(sec=0, nanosec=int(self.trajectory_time_from_start * 1e9))
+        trajectory_cmd.points.append(point)
+        return trajectory_cmd
 
     def step_callback(self):
+
         if self.iteration % 500 == 0:
             self.target_command = self.sample_random_pose()
+            self.get_logger().info(f"New target command: {self.target_command}")
 
         joint_pos = self.robot.forward(self.step_size, self.target_command)
 
