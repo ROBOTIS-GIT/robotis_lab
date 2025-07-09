@@ -65,40 +65,40 @@ OMY Reach task
 
 ```bash
 # Train
-python scripts/reinforcement_learning/skrl/train.py --task RobotisLab-Reach-OMY-v0 --num_envs=512 --headless
+python scripts/reinforcement_learning/rsl_rl/train.py --task RobotisLab-Reach-OMY-v0 --num_envs=512 --headless
 
 # Play
-python scripts/reinforcement_learning/skrl/play.py --task RobotisLab-Reach-OMY-v0 --num_envs=16
+python scripts/reinforcement_learning/rsl_rl/play.py --task RobotisLab-Reach-OMY-v0 --num_envs=16
 ```
 
 OMY Lift task
 
 ```bash
 # Train
-python scripts/reinforcement_learning/skrl/train.py --task RobotisLab-Lift-Cube-OMY-v0 --num_envs=512 --headless
+python scripts/reinforcement_learning/rsl_rl/train.py --task RobotisLab-Lift-Cube-OMY-v0 --num_envs=512 --headless
 
 # Play
-python scripts/reinforcement_learning/skrl/play.py --task RobotisLab-Lift-Cube-OMY-v0 --num_envs=16
+python scripts/reinforcement_learning/rsl_rl/play.py --task RobotisLab-Lift-Cube-OMY-v0 --num_envs=16
 ```
 
 OMY Open drawer task
 
 ```bash
 # Train
-python scripts/reinforcement_learning/skrl/train.py --task RobotisLab-Open-Drawer-OMY-v0 --num_envs=512 --headless
+python scripts/reinforcement_learning/rsl_rl/train.py --task RobotisLab-Open-Drawer-OMY-v0 --num_envs=512 --headless
 
 # Play
-python scripts/reinforcement_learning/skrl/play.py --task RobotisLab-Open-Drawer-OMY-v0 --num_envs=16
+python scripts/reinforcement_learning/rsl_rl/play.py --task RobotisLab-Open-Drawer-OMY-v0 --num_envs=16
 ```
 
 FFW-BG2 reach task
 
 ```bash
 # Train
-python scripts/reinforcement_learning/skrl/train.py --task RobotisLab-Reach-FFW-BG2-v0 --num_envs=512 --headless
+python scripts/reinforcement_learning/rsl_rl/train.py --task RobotisLab-Reach-FFW-BG2-v0 --num_envs=512 --headless
 
 # Play
-python scripts/reinforcement_learning/skrl/play.py --task RobotisLab-Reach-FFW-BG2-v0 --num_envs=16
+python scripts/reinforcement_learning/rsl_rl/play.py --task RobotisLab-Reach-FFW-BG2-v0 --num_envs=16
 ```
 
 ### Imitation learning
