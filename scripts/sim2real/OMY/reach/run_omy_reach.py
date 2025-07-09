@@ -90,7 +90,6 @@ class OMYReachPolicy(PolicyExecutor):
             print("\n=== Policy Step ===")
             print(f"{'Command:':<20} {np.round(command, 4)}")
             print(f"{'Δ Joint Positions:':<20} {np.round(obs[:6], 4)}")
-            # print(f"{'Joint Velocities:':<20} {np.round(obs[6:12], 4)}")
             print(f"{'Previous Action:':<20} {np.round(obs[12:19], 4)}")
             print(f"{'Raw Action:':<20} {np.round(self.action, 4)}")
             print(f"{'Processed Action:':<20} {np.round(joint_positions, 4)}")
