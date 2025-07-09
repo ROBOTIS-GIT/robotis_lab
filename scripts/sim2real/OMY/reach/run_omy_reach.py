@@ -129,7 +129,7 @@ class ReachPolicy(Node):
 
     def sample_random_pose(self) -> np.ndarray:
         pos = np.random.uniform([0.25, -0.2, 0.3], [0.45, 0.2, 0.45])
-        roll = np.random.uniform(0.0, math.pi)
+        roll = np.random.uniform(-math.pi / 4, math.pi / 2)
         pitch = np.random.uniform(0.0, 0.0)
         yaw = np.random.uniform(0.0, math.pi)
         quat = Rotation.from_euler("xyz", [roll, pitch, yaw]).as_quat()  # [w, x, y, z]
