@@ -46,11 +46,12 @@ class OMYReachEnvCfg(ReachEnvCfg):
         # switch robot to OMY robot
         self.scene.robot = OMY_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
         # override events
-        self.events.reset_robot_joints.params["position_range"] = (1.0, 1.0)
+        self.events.reset_robot_joints.params["position_range"] = (0.75, 1.25)
         # override rewards
         self.rewards.end_effector_position_tracking.params["asset_cfg"].body_names = ["link6"]
         self.rewards.end_effector_position_tracking_fine_grained.params["asset_cfg"].body_names = ["link6"]
         self.rewards.end_effector_orientation_tracking.params["asset_cfg"].body_names = ["link6"]
+        self.rewards.end_effector_orientation_tracking_fine_grained.params["asset_cfg"].body_names = ["link6"]
 
         arm_joint_names=[
             "joint1", "joint2", "joint3", "joint4", "joint5", "joint6"
@@ -65,9 +66,6 @@ class OMYReachEnvCfg(ReachEnvCfg):
         )
         # override observations policy
         self.observations.policy.joint_pos.params["asset_cfg"] = SceneEntityCfg(
-            name="robot", joint_names=arm_joint_names
-        )
-        self.observations.policy.joint_vel.params["asset_cfg"] = SceneEntityCfg(
             name="robot", joint_names=arm_joint_names
         )
 

@@ -32,6 +32,8 @@ from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 
 from utils.policy_controller import PolicyExecutor
 
+from geometry_msgs.msg import TransformStamped
+from tf2_ros import TransformBroadcaster
 
 class OMYReachPolicy(PolicyExecutor):
     """Policy controller for OMY Reach using a pre-trained policy model."""
@@ -41,7 +43,7 @@ class OMYReachPolicy(PolicyExecutor):
         self.dof_names = [f"joint{i}" for i in range(1, 7)]
 
         repo_root = Path(__file__).resolve().parents[4]
-        model_dir = repo_root / "logs/rsl_rl/reach_omy/2025-07-09_05-26-54"
+        model_dir = repo_root / "logs/rsl_rl/reach_omy/2025-07-09_07-59-15"
 
         self.load_policy(
             model_dir / "exported/policy.pt",
@@ -64,11 +66,11 @@ class OMYReachPolicy(PolicyExecutor):
         if not self.has_joint_data:
             return None
 
-        obs = np.zeros(25)
+        obs = np.zeros(19)
         obs[:6] = self.current_joint_positions - self.default_pos
-        obs[6:12] = self.current_joint_velocities
-        obs[12:19] = command
-        obs[19:25] = self.previous_action
+        # obs[6:12] = self.current_joint_velocities
+        obs[6:13] = command
+        obs[13:19] = self.previous_action
         return obs
 
     def forward(self, dt: float, command: np.ndarray) -> np.ndarray:
@@ -88,8 +90,8 @@ class OMYReachPolicy(PolicyExecutor):
             print("\n=== Policy Step ===")
             print(f"{'Command:':<20} {np.round(command, 4)}")
             print(f"{'Δ Joint Positions:':<20} {np.round(obs[:6], 4)}")
-            print(f"{'Joint Velocities:':<20} {np.round(obs[6:12], 4)}")
-            print(f"{'Previous Action:':<20} {np.round(obs[19:25], 4)}")
+            # print(f"{'Joint Velocities:':<20} {np.round(obs[6:12], 4)}")
+            print(f"{'Previous Action:':<20} {np.round(obs[12:19], 4)}")
             print(f"{'Raw Action:':<20} {np.round(self.action, 4)}")
             print(f"{'Processed Action:':<20} {np.round(joint_positions, 4)}")
 
@@ -108,6 +110,8 @@ class ReachPolicy(Node):
         self.timer = self.create_timer(self.step_size, self.step_callback)
         self.iteration = 0
 
+        self.br = TransformBroadcaster(self)
+
         self.create_subscription(
             JointTrajectoryControllerState,
             '/arm_controller/controller_state',
@@ -118,9 +122,11 @@ class ReachPolicy(Node):
         self.pub = self.create_publisher(
             JointTrajectory, '/arm_controller/joint_trajectory', 10
         )
-        self.trajectory_time_from_start = 0.1  # in seconds
+
+        self.trajectory_time_from_start = 0.05  # in seconds
 
         self.joint_names = [f"joint{i}" for i in range(1, 7)]
+        print(f"Joint names: {self.joint_names}")
 
         self.get_logger().info("ReachPolicy node initialized.")
 
@@ -148,9 +154,11 @@ class ReachPolicy(Node):
 
     def step_callback(self):
 
-        if self.iteration % 500 == 0:
+        if self.iteration % 1000 == 0:
             self.target_command = self.sample_random_pose()
             self.get_logger().info(f"New target command: {self.target_command}")
+        self.broadcast_target_pose_tf()
+
 
         joint_pos = self.robot.forward(self.step_size, self.target_command)
 
@@ -162,6 +170,22 @@ class ReachPolicy(Node):
 
         self.iteration += 1
 
+    def broadcast_target_pose_tf(self):
+        t = TransformStamped()
+        t.header.stamp = self.get_clock().now().to_msg()
+        t.header.frame_id = "world"
+        t.child_frame_id = "target_pose"
+
+        t.transform.translation.x = self.target_command[0]
+        t.transform.translation.y = self.target_command[1]
+        t.transform.translation.z = self.target_command[2]
+
+        t.transform.rotation.x = self.target_command[3]
+        t.transform.rotation.y = self.target_command[4]
+        t.transform.rotation.z = self.target_command[5]
+        t.transform.rotation.w = self.target_command[6]
+
+        self.br.sendTransform(t)
 
 def main(args=None):
     rclpy.init(args=args)

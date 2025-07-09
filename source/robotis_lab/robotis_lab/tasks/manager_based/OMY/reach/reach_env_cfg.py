@@ -88,9 +88,9 @@ class CommandsCfg:
         resampling_time_range=(2.0, 2.0),
         debug_vis=True,
         ranges=mdp.UniformPoseCommandCfg.Ranges(
-            pos_x=(0.25, 0.55),
+            pos_x=(0.25, 0.5),
             pos_y=(-0.2, 0.2),
-            pos_z=(0.2, 0.4),
+            pos_z=(0.3, 0.4),
             roll=(math.pi / 2 - math.pi / 8, math.pi / 2 + math.pi / 8),
             pitch=(- math.pi / 8, math.pi / 8),
             yaw=(math.pi / 2 - math.pi / 8, math.pi / 2 + math.pi / 8),
@@ -116,7 +116,6 @@ class ObservationsCfg:
 
         # observation terms (order preserved)
         joint_pos = ObsTerm(func=mdp.joint_pos_rel, noise=Unoise(n_min=-0.01, n_max=0.01))
-        joint_vel = ObsTerm(func=mdp.joint_vel_rel, noise=Unoise(n_min=-0.01, n_max=0.01))
         pose_command = ObsTerm(func=mdp.generated_commands, params={"command_name": "ee_pose"})
         actions = ObsTerm(func=mdp.last_action)
 
@@ -154,22 +153,28 @@ class RewardsCfg:
     )
     end_effector_position_tracking_fine_grained = RewTerm(
         func=mdp.position_command_error_tanh,
-        weight=0.1,
+        weight=0.12,
         params={"asset_cfg": SceneEntityCfg("robot", body_names=MISSING), "std": 0.1, "command_name": "ee_pose"},
     )
     end_effector_orientation_tracking = RewTerm(
         func=mdp.orientation_command_error,
-        weight=-0.1,
+        weight=-0.15,
         params={"asset_cfg": SceneEntityCfg("robot", body_names=MISSING), "command_name": "ee_pose"},
+    )
+
+    end_effector_orientation_tracking_fine_grained = RewTerm(
+        func=mdp.orientation_command_reward_tanh,
+        weight=0.03,
+        params={"asset_cfg": SceneEntityCfg("robot", body_names=MISSING), "std": 0.1, "command_name": "ee_pose"},
     )
 
     # action penalty
     action_rate = RewTerm(func=mdp.action_rate_l2, weight=-0.0001)
-    joint_vel = RewTerm(
-        func=mdp.joint_vel_l2,
-        weight=-0.0001,
-        params={"asset_cfg": SceneEntityCfg("robot")},
-    )
+    # joint_vel = RewTerm(
+    #     func=mdp.joint_vel_l2,
+    #     weight=-0.0001,
+    #     params={"asset_cfg": SceneEntityCfg("robot")},
+    # )
 
 
 @configclass
@@ -187,15 +192,9 @@ class CurriculumCfg:
         func=mdp.modify_reward_weight, params={"term_name": "action_rate", "weight": -0.005, "num_steps": 4500}
     )
 
-    joint_vel = CurrTerm(
-        func=mdp.modify_reward_weight, params={"term_name": "joint_vel", "weight": -0.001, "num_steps": 4500}
-    )
-
-
 ##
 # Environment configuration
 ##
-
 
 @configclass
 class ReachEnvCfg(ManagerBasedRLEnvCfg):
