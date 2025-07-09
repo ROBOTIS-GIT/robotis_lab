@@ -162,19 +162,8 @@ class RewardsCfg:
         params={"asset_cfg": SceneEntityCfg("robot", body_names=MISSING), "command_name": "ee_pose"},
     )
 
-    end_effector_orientation_tracking_fine_grained = RewTerm(
-        func=mdp.orientation_command_reward_tanh,
-        weight=0.03,
-        params={"asset_cfg": SceneEntityCfg("robot", body_names=MISSING), "std": 0.1, "command_name": "ee_pose"},
-    )
-
     # action penalty
     action_rate = RewTerm(func=mdp.action_rate_l2, weight=-0.0001)
-    # joint_vel = RewTerm(
-    #     func=mdp.joint_vel_l2,
-    #     weight=-0.0001,
-    #     params={"asset_cfg": SceneEntityCfg("robot")},
-    # )
 
 
 @configclass

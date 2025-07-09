@@ -86,27 +86,3 @@ def orientation_command_error(env: ManagerBasedRLEnv, command_name: str, asset_c
     des_quat_w = quat_mul(asset.data.root_state_w[:, 3:7], des_quat_b)
     curr_quat_w = asset.data.body_state_w[:, asset_cfg.body_ids[0], 3:7]  # type: ignore
     return quat_error_magnitude(curr_quat_w, des_quat_w)
-
-def orientation_command_reward_tanh(
-    env: ManagerBasedRLEnv, std: float, command_name: str, asset_cfg: SceneEntityCfg
-) -> torch.Tensor:
-    """
-    Reward orientation alignment using tanh kernel.
-
-    Returns a reward close to 1 when the orientation is well aligned,
-    and closer to 0 when the orientation deviates more.
-    """
-    asset: RigidObject = env.scene[asset_cfg.name]
-    command = env.command_manager.get_command(command_name)
-
-    # desired & current orientation
-    des_quat_b = command[:, 3:7]
-    des_quat_w = quat_mul(asset.data.root_state_w[:, 3:7], des_quat_b)
-    curr_quat_w = asset.data.body_state_w[:, asset_cfg.body_ids[0], 3:7]  # type: ignore
-
-    # quaternion error magnitude: value in [0, π]
-    quat_err = quat_error_magnitude(curr_quat_w, des_quat_w)
-
-    # Convert to reward: 1 - tanh(error / std)
-    reward = 1.0 - torch.tanh(quat_err / std)
-    return reward
