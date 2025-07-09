@@ -88,12 +88,12 @@ class CommandsCfg:
         resampling_time_range=(2.0, 2.0),
         debug_vis=True,
         ranges=mdp.UniformPoseCommandCfg.Ranges(
-            pos_x=(0.25, 0.5),
-            pos_y=(-0.2, 0.2),
-            pos_z=(0.3, 0.4),
-            roll=(math.pi / 2 - math.pi / 8, math.pi / 2 + math.pi / 8),
-            pitch=(- math.pi / 8, math.pi / 8),
-            yaw=(math.pi / 2 - math.pi / 8, math.pi / 2 + math.pi / 8),
+            pos_x=(0.25, 0.45),
+            pos_y=(-0.15, 0.15),
+            pos_z=(0.3, 0.45),
+            roll=(0.0, math.pi),
+            pitch=(0.0, 0.0),
+            yaw=(0.0, math.pi),
         ),
     )
 

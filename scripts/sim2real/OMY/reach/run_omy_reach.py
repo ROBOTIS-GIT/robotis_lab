@@ -40,7 +40,7 @@ from utils.policy_executor import PolicyExecutor
 class OMYReachPolicy(PolicyExecutor):
     def __init__(self, model_dir: str, debug: bool) -> None:
         super().__init__()
-        self.dof_names = [f"joint{i}" for i in range(1, 7)]
+        self.joint_names = [f"joint{i}" for i in range(1, 7)]
 
         repo_root = Path(__file__).resolve().parents[4]
         model_dir = repo_root / "logs/rsl_rl/reach_omy" / model_dir
@@ -55,6 +55,7 @@ class OMYReachPolicy(PolicyExecutor):
         self.previous_action = np.zeros(6)
         self.current_joint_positions = np.zeros(6)
         self.current_joint_velocities = np.zeros(6)
+
 
     def update_joint_state(self, position, velocity) -> None:
         self.current_joint_positions = np.array(position[:self.num_joints], dtype=np.float32)
@@ -103,13 +104,10 @@ class ReachPolicy(Node):
         self.robot = OMYReachPolicy(model_dir, debug)
         self.target_command = np.zeros(6)
         self.step_size = 1.0 / 200  # 200Hz
+        self.trajectory_time_from_start = 0.03
+
         self.iteration = 0
-        self.trajectory_time_from_start = 0.0
-
         self.br = TransformBroadcaster(self)
-
-        self.joint_names = [f"joint{i}" for i in range(1, 7)]
-        self.get_logger().info(f"Joint names: {self.joint_names}")
 
         self.create_subscription(
             JointTrajectoryControllerState,
@@ -130,26 +128,26 @@ class ReachPolicy(Node):
         self.robot.update_joint_state(msg.feedback.positions, msg.feedback.velocities)
 
     def sample_random_pose(self) -> np.ndarray:
-        pos = np.random.uniform([0.3, -0.2, 0.3], [0.5, 0.2, 0.4])
-        euler = np.random.uniform(
-            [math.pi/2 - math.pi/8, -math.pi/8, math.pi/2 - math.pi/8],
-            [math.pi/2 + math.pi/8, math.pi/8, math.pi/2 + math.pi/8]
-        )
-        quat = Rotation.from_euler("xyz", euler).as_quat()
+        pos = np.random.uniform([0.25, -0.2, 0.3], [0.45, 0.2, 0.45])
+        roll = np.random.uniform(0.0, math.pi)
+        pitch = np.random.uniform(0.0, 0.0)
+        yaw = np.random.uniform(0.0, math.pi)
+        quat = Rotation.from_euler("xyz", [roll, pitch, yaw]).as_quat()  # [w, x, y, z]
+
         return np.concatenate([pos, quat])
 
-    def create_trajectory_command(self, joint_pos: np.ndarray) -> JointTrajectory:
+    def create_trajectory_command(self, joint_positions: np.ndarray) -> JointTrajectory:
         point = JointTrajectoryPoint()
-        point.positions = joint_pos
+        point.positions = joint_positions
         point.time_from_start = Duration(
             sec=0,
             nanosec=int(self.trajectory_time_from_start * 1e9)
         )
 
-        traj = JointTrajectory()
-        traj.joint_names = self.joint_names
-        traj.points.append(point)
-        return traj
+        joint_trajectory = JointTrajectory()
+        joint_trajectory.joint_names = self.robot.joint_names
+        joint_trajectory.points.append(point)
+        return joint_trajectory
 
     def broadcast_target_pose_tf(self):
         t = TransformStamped()
@@ -160,25 +158,25 @@ class ReachPolicy(Node):
         t.transform.translation.x = self.target_command[0]
         t.transform.translation.y = self.target_command[1]
         t.transform.translation.z = self.target_command[2]
-        t.transform.rotation.x = self.target_command[3]
-        t.transform.rotation.y = self.target_command[4]
-        t.transform.rotation.z = self.target_command[5]
-        t.transform.rotation.w = self.target_command[6]
+        t.transform.rotation.x = self.target_command[4]
+        t.transform.rotation.y = self.target_command[5]
+        t.transform.rotation.z = self.target_command[6]
+        t.transform.rotation.w = self.target_command[3]
 
         self.br.sendTransform(t)
 
     def step_callback(self):
-        if self.iteration % 500 == 0:
+        if self.iteration % 400 == 0:
             self.target_command = self.sample_random_pose()
             self.broadcast_target_pose_tf()
             self.get_logger().info(f"New target command: {np.round(self.target_command, 4)}")
 
-        joint_pos = self.robot.forward(self.target_command)
-        if joint_pos is not None:
-            if len(joint_pos) != 6:
-                raise ValueError(f"Expected 6 joint positions, got {len(joint_pos)}")
-            traj_msg = self.create_trajectory_command(joint_pos)
-            self.joint_trajectory_publisher.publish(traj_msg)
+        joint_positions = self.robot.forward(self.target_command)
+        if joint_positions is not None:
+            if len(joint_positions) != 6:
+                raise ValueError(f"Expected 6 joint positions, got {len(joint_positions)}")
+            joint_trajectory_msg = self.create_trajectory_command(joint_positions)
+            self.joint_trajectory_publisher.publish(joint_trajectory_msg)
 
         self.iteration += 1
 
