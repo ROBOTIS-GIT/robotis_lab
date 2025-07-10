@@ -61,13 +61,13 @@ class ReachPolicy(Node, PolicyExecutor):
 
         self.joint_state_subscriber = self.create_subscription(
             JointTrajectoryControllerState,
-            '/arm_controller/controller_state',
+            self.cfg.joint_state_topic,
             self.joint_state_callback,
             10
         )
         self.joint_trajectory_publisher = self.create_publisher(
             JointTrajectory,
-            '/arm_controller/joint_trajectory',
+            self.cfg.joint_trajectory_topic,
             10
         )
         self.joint_command_timer = self.create_timer(self.cfg.step_size, self.timer_callback)

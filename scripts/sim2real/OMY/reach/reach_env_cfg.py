@@ -11,7 +11,10 @@ class ReachEnvConfig:
         self.joint_names = [f"joint{i}" for i in range(1, 7)]
         self.step_size = 1.0 / 200  # 200Hz
         self.trajectory_time_from_start = 0.0 # seconds
-        self.send_command_interval = 5.0 # seconds
+        self.send_command_interval = 2.0 # seconds
+
+        self.joint_state_topic = "/arm_controller/controller_state"
+        self.joint_trajectory_topic = "/arm_controller/joint_trajectory"
 
         repo_root = Path(__file__).resolve().parents[4]
         self.policy_path = repo_root / "logs/rsl_rl/reach_omy" / model_dir / "exported/policy.pt"
