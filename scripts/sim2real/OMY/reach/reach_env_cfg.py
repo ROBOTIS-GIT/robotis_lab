@@ -15,7 +15,7 @@ class ReachEnvConfig:
         self.send_command_interval = 3.0 # seconds
 
         self.joint_state_topic = "/arm_controller/controller_state"
-        self.joint_trajectory_topic = "/leader/joint_trajectory"
+        self.joint_trajectory_topic = "/arm_controller/joint_trajectory"
 
         repo_root = Path(__file__).resolve().parents[4]
         self.policy_path = repo_root / "logs/rsl_rl/reach_omy" / model_dir / "exported/policy.pt"
