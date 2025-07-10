@@ -113,17 +113,21 @@ class ReachPolicy(Node, PolicyExecutor):
 
         command_interval = int(self.cfg.send_command_interval / self.cfg.step_size)
 
-        if self.iteration % command_interval == 0:
+        if self.iteration % (2*command_interval) == 0:
             self.target_command = self.cfg.sample_random_pose()
             self.broadcast_target_pose_tf()
             self.get_logger().info(f"New target command: {np.round(self.target_command, 4)}")
 
-        joint_positions = self.forward(self.target_command)
-        if joint_positions is not None:
-            if len(joint_positions) != 6:
-                raise ValueError(f"Expected 6 joint positions, got {len(joint_positions)}")
-            joint_trajectory_msg = self.create_trajectory_command(joint_positions)
+        if self.iteration % (2*command_interval) < command_interval:
+            joint_trajectory_msg = self.create_trajectory_command(self.default_pos)
             self.joint_trajectory_publisher.publish(joint_trajectory_msg)
+        else:
+            joint_positions = self.forward(self.target_command)
+            if joint_positions is not None:
+                if len(joint_positions) != 6:
+                    raise ValueError(f"Expected 6 joint positions, got {len(joint_positions)}")
+                joint_trajectory_msg = self.create_trajectory_command(joint_positions)
+                self.joint_trajectory_publisher.publish(joint_trajectory_msg)
 
         self.iteration += 1
 
