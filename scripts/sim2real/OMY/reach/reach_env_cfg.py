@@ -9,8 +9,8 @@ from pathlib import Path
 class ReachEnvConfig:
     def __init__(self, model_dir: str):
         self.joint_names = [f"joint{i}" for i in range(1, 7)]
-        self.step_size = 1.0 / 60  # 200Hz
-        self.trajectory_time_from_start = 0.05
+        self.step_size = 1.0 / 1000  # 1000Hz
+        self.trajectory_time_from_start = 1.0/20 # 20Hz
          # seconds
         self.send_command_interval = 3.0 # seconds
 

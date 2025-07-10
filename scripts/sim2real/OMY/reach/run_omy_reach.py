@@ -136,10 +136,12 @@ class ReachPolicy(Node, PolicyExecutor):
         self.current_joint_velocities = np.array(velocity[:self.num_joints], dtype=np.float32)
 
     def compute_observation(self, command: np.ndarray) -> np.ndarray:
-        obs = np.zeros(19, dtype=np.float32)
+        obs = np.zeros(25, dtype=np.float32)
         obs[:6] = self.current_joint_positions - self.default_pos
-        obs[6:13] = command
-        obs[13:19] = self.previous_action
+        obs[6:12] = self.current_joint_velocities
+        obs[12:19] = command
+        obs[19:25] = self.previous_action
+
         return obs
 
     def forward(self, command: np.ndarray) -> np.ndarray:
@@ -155,7 +157,8 @@ class ReachPolicy(Node, PolicyExecutor):
             print("\n=== Policy Step ===")
             print(f"{'Command:':<20} {np.round(command, 4)}")
             print(f"{'Δ Joint Positions:':<20} {np.round(observation[:6], 4)}")
-            print(f"{'Previous Action:':<20} {np.round(observation[13:19], 4)}")
+            print(f"{'Joint Velocities:':<20} {np.round(observation[6:12], 4)}")
+            print(f"{'Previous Action:':<20} {np.round(observation[19:25], 4)}")
             print(f"{'Raw Action:':<20} {np.round(self.action, 4)}")
             print(f"{'Processed Action:':<20} {np.round(joint_positions, 4)}")
 

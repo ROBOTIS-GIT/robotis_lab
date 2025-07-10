@@ -51,15 +51,19 @@ OMY_CFG = ArticulationCfg(
     actuators={
         "DY_80": ImplicitActuatorCfg(
             joint_names_expr=["joint[1-2]"],
+            velocity_limit=3.0,
             velocity_limit_sim=3.0,
             effort_limit=60.0,
+            effort_limit_sim=60.0,
             stiffness=80.0,
             damping=4.0,
         ),
         "DY_70": ImplicitActuatorCfg(
             joint_names_expr=["joint[3-6]"],
+            velocity_limit=6.0,
             velocity_limit_sim=6.0,
             effort_limit=30.0,
+            effort_limit_sim=30.0,
             stiffness=80.0,
             damping=4.0,
         ),
