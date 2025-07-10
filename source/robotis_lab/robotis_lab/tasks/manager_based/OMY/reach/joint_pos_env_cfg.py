@@ -67,6 +67,9 @@ class OMYReachEnvCfg(ReachEnvCfg):
         self.observations.policy.joint_pos.params["asset_cfg"] = SceneEntityCfg(
             name="robot", joint_names=arm_joint_names
         )
+        self.observations.policy.joint_vel.params["asset_cfg"] = SceneEntityCfg(
+            name="robot", joint_names=arm_joint_names
+        )
 
         # override command generator body
         # end-effector is along x-direction

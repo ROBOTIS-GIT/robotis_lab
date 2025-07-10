@@ -49,16 +49,23 @@ OMY_CFG = ArticulationCfg(
         },
     ),
     actuators={
-        "arm": ImplicitActuatorCfg(
-            joint_names_expr=["joint[1-6]"],
-            velocity_limit=100.0,
-            effort_limit=10000.0,
-            stiffness=400.0,
-            damping=80.0,
+        "DY_80": ImplicitActuatorCfg(
+            joint_names_expr=["joint[1-2]"],
+            velocity_limit_sim=3.0,
+            effort_limit=60.0,
+            stiffness=80.0,
+            damping=4.0,
+        ),
+        "DY_70": ImplicitActuatorCfg(
+            joint_names_expr=["joint[3-6]"],
+            velocity_limit_sim=6.0,
+            effort_limit=30.0,
+            stiffness=80.0,
+            damping=4.0,
         ),
         "hand": ImplicitActuatorCfg(
             joint_names_expr=["rh_l1", "rh_l2", "rh_r1_joint", "rh_r2"],
-            velocity_limit=100.0,
+            velocity_limit_sim=100.0,
             effort_limit=1000.0,
             stiffness=1000000.0,
             damping=100.0,
