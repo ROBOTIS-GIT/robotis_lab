@@ -53,10 +53,10 @@ class ReachPolicy(Node, PolicyExecutor):
         self.iteration = 0
         self.has_joint_data = False
 
-        self.target_command = np.zeros(7)
-        self.previous_action = np.zeros(6)
-        self.current_joint_positions = np.zeros(6)
-        self.current_joint_velocities = np.zeros(6)
+        self.target_command = np.zeros(7)  # [x, y, z, qw, qx, qy, qz]
+        self.previous_action = np.zeros(self.num_joints)
+        self.current_joint_positions = np.zeros(self.num_joints)
+        self.current_joint_velocities = np.zeros(self.num_joints)
 
         self.joint_state_subscriber = self.create_subscription(
             JointTrajectoryControllerState,
@@ -128,8 +128,8 @@ class ReachPolicy(Node, PolicyExecutor):
         else:
             joint_positions = self.forward(self.target_command)
             if joint_positions is not None:
-                if len(joint_positions) != 6:
-                    raise ValueError(f"Expected 6 joint positions, got {len(joint_positions)}")
+                if len(joint_positions) != self.num_joints:
+                    raise ValueError(f"Expected {self.num_joints} joint positions, got {len(joint_positions)}")
                 joint_trajectory_msg = self.create_trajectory_command(joint_positions)
                 self.joint_trajectory_publisher.publish(joint_trajectory_msg)
 
@@ -142,11 +142,12 @@ class ReachPolicy(Node, PolicyExecutor):
 
     def compute_observation(self, command: np.ndarray) -> np.ndarray:
         """Builds the observation vector for the policy."""
-        obs = np.zeros(25, dtype=np.float32)
-        obs[:6] = self.current_joint_positions - self.default_pos
-        obs[6:12] = self.current_joint_velocities
-        obs[12:19] = command
-        obs[19:25] = self.previous_action
+        obs = np.concatenate([
+            self.current_joint_positions - self.default_pos,
+            self.current_joint_velocities,
+            command,
+            self.previous_action,
+        ]).astype(np.float32)
 
         return obs
 
@@ -161,13 +162,13 @@ class ReachPolicy(Node, PolicyExecutor):
         joint_positions = self.default_pos + (self.action * self.action_scale)
 
         if self.debug:
-            print("\n=== Policy Step ===")
-            print(f"{'Command:':<20} {np.round(command, 4)}")
-            print(f"{'Δ Joint Positions:':<20} {np.round(observation[:6], 4)}")
-            print(f"{'Joint Velocities:':<20} {np.round(observation[6:12], 4)}")
-            print(f"{'Previous Action:':<20} {np.round(observation[19:25], 4)}")
-            print(f"{'Raw Action:':<20} {np.round(self.action, 4)}")
-            print(f"{'Processed Action:':<20} {np.round(joint_positions, 4)}")
+            self.get_logger().info("\n=== Policy Step ===")
+            self.get_logger().info(f"{'Command:':<20} {np.round(command, 4)}")
+            self.get_logger().info(f"{'Δ Joint Positions:':<20} {np.round(observation[:6], 4)}")
+            self.get_logger().info(f"{'Joint Velocities:':<20} {np.round(observation[6:12], 4)}")
+            self.get_logger().info(f"{'Previous Action:':<20} {np.round(observation[19:25], 4)}")
+            self.get_logger().info(f"{'Raw Action:':<20} {np.round(self.action, 4)}")
+            self.get_logger().info(f"{'Processed Action:':<20} {np.round(joint_positions, 4)}")
 
         return joint_positions
 

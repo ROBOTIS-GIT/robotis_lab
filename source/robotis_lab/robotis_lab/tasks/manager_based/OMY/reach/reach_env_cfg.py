@@ -171,6 +171,7 @@ class RewardsCfg:
         params={"asset_cfg": SceneEntityCfg("robot")},
     )
 
+
 @configclass
 class TerminationsCfg:
     """Termination terms for the MDP."""
@@ -192,6 +193,7 @@ class CurriculumCfg:
 ##
 # Environment configuration
 ##
+
 
 @configclass
 class ReachEnvCfg(ManagerBasedRLEnvCfg):

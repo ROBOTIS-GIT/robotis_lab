@@ -52,7 +52,7 @@ class OMYReachEnvCfg(ReachEnvCfg):
         self.rewards.end_effector_position_tracking_fine_grained.params["asset_cfg"].body_names = ["link6"]
         self.rewards.end_effector_orientation_tracking.params["asset_cfg"].body_names = ["link6"]
 
-        arm_joint_names=[
+        arm_joint_names = [
             "joint1", "joint2", "joint3", "joint4", "joint5", "joint6"
         ]
 

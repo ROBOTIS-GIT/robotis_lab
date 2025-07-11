@@ -71,7 +71,7 @@ class PolicyExecutor:
 
         print("\n--- Robot joint properties ---")
         print(f"{'Number of joints:':<18} {self.num_joints}")
-        print(f"{'Stifness:':<18} {self.stiffness}")
+        print(f"{'Stiffness:':<18} {self.stiffness}")
         print(f"{'Damping:':<18} {self.damping}")
         print(f"{'Default position:':<18} {self.default_pos}")
         print(f"{'Default velocity:':<18} {self.default_vel}")

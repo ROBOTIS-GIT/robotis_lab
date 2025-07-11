@@ -20,7 +20,6 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import gymnasium as gym
-import os
 
 from . import agents
 

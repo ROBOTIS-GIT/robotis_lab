@@ -58,7 +58,7 @@ def parse_env_config(env_config_path: str = "env.yaml") -> dict:
 
 def get_robot_joint_properties(
     data: dict, joint_names: List[str]
-) -> Tuple[List[float], List[float], List[float], List[float], List[float], List[float]]:
+) -> Tuple[List[float], List[float], List[float], List[float]]:
     """
     Gets the robot joint properties from the environment configuration data.
 
@@ -67,7 +67,7 @@ def get_robot_joint_properties(
         joint_names (List[str]): The list of joint names in the expected order.
 
     Returns:
-        tuple: A tuple containing the effort limits, velocity limits, stiffness, damping, default positions, and default velocities.
+        tuple: A tuple containing the stiffness, damping, default positions, and default velocities.
     """
     actuator_data = data.get("scene").get("robot").get("actuators")
     stiffness = {}
@@ -175,7 +175,7 @@ def get_robot_joint_properties(
         default_vel_inorder,
     )
 
-def get_physics_properties(data: dict) -> dict:
+def get_physics_properties(data: dict) -> Tuple[int, float, int]:
     """
     Gets the physics properties from the environment configuration data.
 

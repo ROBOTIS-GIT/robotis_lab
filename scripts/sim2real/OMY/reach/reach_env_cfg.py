@@ -1,4 +1,4 @@
-# robotis_lab/sim2real/robot/OMY/reach/config.py
+# robotis_lab/sim2real/OMY/reach/reach_env_cfg.py
 
 import math
 import numpy as np
