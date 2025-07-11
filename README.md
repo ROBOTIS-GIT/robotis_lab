@@ -8,7 +8,7 @@
 
 ## Overview
 
-**robotis_lab** is a research-oriented repository based on [Isaac Lab](https://isaac-sim.github.io/IsaacLab), designed to enable reinforcement learning (RL) and imitation learning (IL) experiments using Robotis robots in simulation.
+**robotis_lab** is a research-oriented repository based on [Isaac Lab](https://isaac-sim.github.io/IsaacLab), designed to enable reinforcement learning and imitation learning experiments using Robotis robots in simulation.
 This project provides simulation environments, configuration tools, and task definitions tailored for Robotis hardware, leveraging NVIDIA Isaac Sim’s powerful GPU-accelerated physics engine and Isaac Lab’s modular RL pipeline.
 
 > [!IMPORTANT]
@@ -17,22 +17,36 @@ This project provides simulation environments, configuration tools, and task def
 
 ## Installation
 
-- Install Isaac Lab by following the [installation guide](https://isaac-sim.github.io/IsaacLab/main/source/setup/installation/index.html). We recommend using the conda installation as it simplifies calling Python scripts from the terminal.
+1. Follow the [Isaac Lab installation guide](https://isaac-sim.github.io/IsaacLab/main/source/setup/installation/index.html) to set up the environment.  
+  Instead of the recommended local installation, you can run Isaac Lab in a Docker container to simplify dependency management and ensure consistency across systems.
 
-- Clone the robotis_lab Repository (i.e. outside the `IsaacLab` directory):
-
+2. Clone the Isaac Lab Repository:
   ```bash
-  git clone https://github.com/ROBOTIS-GIT/robotis_lab.git
+  git clone https://github.com/isaac-sim/IsaacLab.git
   ```
 
-- Install the robotis_lab Package
-
+3. Start and enter the Docker container:
   ```bash
-  cd robotis_lab
-  python -m pip install -e source/robotis_lab
+  # start
+  ./IsaacLab/docker/container.py start base
+
+  # enter
+  ./IsaacLab/docker/container.py enter base
   ```
 
-- Verify that the extension is correctly installed by running the following command to print all the available environments in the extension:
+4. Clone the robotis_lab repository (outside the IsaacLab directory):
+
+  ```bash
+  cd /workspace && git clone https://github.com/ROBOTIS-GIT/robotis_lab.git
+  ```
+
+5. Install the robotis_lab Package.
+
+  ```bash
+  cd robotis_lab && python -m pip install -e source/robotis_lab
+  ```
+
+6. Verify that the extension is correctly installed by listing all available environments:
 
   ```bash
   python scripts/tools/list_envs.py
@@ -65,7 +79,7 @@ OMY Reach task
 
 ```bash
 # Train
-python scripts/reinforcement_learning/rsl_rl/train.py --task RobotisLab-Reach-OMY-v0 --num_envs=512 --headless
+python scripts/reinforcement_learning/rsl_rl/train.py --task RobotisLab-Reach-OMY-v0 --num_envs=1024 --headless
 
 # Play
 python scripts/reinforcement_learning/rsl_rl/play.py --task RobotisLab-Reach-OMY-v0 --num_envs=16
@@ -75,7 +89,7 @@ OMY Lift task
 
 ```bash
 # Train
-python scripts/reinforcement_learning/rsl_rl/train.py --task RobotisLab-Lift-Cube-OMY-v0 --num_envs=512 --headless
+python scripts/reinforcement_learning/rsl_rl/train.py --task RobotisLab-Lift-Cube-OMY-v0 --num_envs=1024 --headless
 
 # Play
 python scripts/reinforcement_learning/rsl_rl/play.py --task RobotisLab-Lift-Cube-OMY-v0 --num_envs=16
@@ -85,7 +99,7 @@ OMY Open drawer task
 
 ```bash
 # Train
-python scripts/reinforcement_learning/rsl_rl/train.py --task RobotisLab-Open-Drawer-OMY-v0 --num_envs=512 --headless
+python scripts/reinforcement_learning/rsl_rl/train.py --task RobotisLab-Open-Drawer-OMY-v0 --num_envs=1024 --headless
 
 # Play
 python scripts/reinforcement_learning/rsl_rl/play.py --task RobotisLab-Open-Drawer-OMY-v0 --num_envs=16
@@ -95,7 +109,7 @@ FFW-BG2 reach task
 
 ```bash
 # Train
-python scripts/reinforcement_learning/rsl_rl/train.py --task RobotisLab-Reach-FFW-BG2-v0 --num_envs=512 --headless
+python scripts/reinforcement_learning/rsl_rl/train.py --task RobotisLab-Reach-FFW-BG2-v0 --num_envs=1024 --headless
 
 # Play
 python scripts/reinforcement_learning/rsl_rl/play.py --task RobotisLab-Reach-FFW-BG2-v0 --num_envs=16
@@ -126,4 +140,51 @@ python scripts/imitation_learning/robomimic/train.py \
 python scripts/imitation_learning/robomimic/play.py \
 --device cuda --task RobotisLab-Stack-Cube-OMY-IK-Rel-v0 --num_rollouts 50 \
 --checkpoint /PATH/TO/desired_model_checkpoint.pth
+```
+
+### Sim2Real Deployment
+We provide a Sim2Real pipeline to deploy policies trained in Isaac Lab simulation directly onto the real OMY robot.
+
+<details>
+<summary>🎥 Show demo video</summary>
+
+![OMY Sim2Real Demo](https://github.com/user-attachments/assets/c7bd5dac-1578-4ba1-845f-afaeefc1677c)
+
+</details>
+
+> [!IMPORTANT]
+> More on OMY Hardware Setup:
+> For details on how to set up and operate the OMY robot, please refer to the [open_manipulator](https://isaac-sim.github.io/IsaacLab)
+
+In this pipeline:
+- The trained policy (exported as a TorchScript .pt file) is executed on the real robot using ROS 2.
+- The robot receives joint state feedback and sends joint trajectory commands via a ROS 2 control interface.
+- A TF frame for the sampled target pose is broadcast for visualization and debugging.
+
+Prerequisites
+- A trained policy (under logs/rsl_rl/reach_omy/<TIMESTAMP>).
+- ROS 2 Humble (or later) installed and sourced.
+- Robot hardware must be ready and controllable via the joint trajectory interface.
+
+Run Sim2Real Reach Policy on OMY
+```bash
+python3 scripts/sim2real/OMY/reach/run_omy_reach.py --model_dir=2025-07-10_08-47-09
+```
+
+Replace <2025-07-10_08-47-09> with the actual timestamp folder name under:
+```bash
+logs/rsl_rl/reach_omy/
+```
+
+OMY Reach task
+
+```bash
+# Train
+python scripts/reinforcement_learning/rsl_rl/train.py --task RobotisLab-Reach-OMY-v0 --num_envs=1024 --headless
+
+# Play
+python scripts/reinforcement_learning/rsl_rl/play.py --task RobotisLab-Reach-OMY-v0 --num_envs=16
+
+# Sim2Real
+python3 scripts/sim2real/OMY/reach/run_omy_reach.py --model_dir=<2025-07-10_08-47-09>
 ```

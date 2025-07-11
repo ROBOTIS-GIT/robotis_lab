@@ -24,7 +24,6 @@ import argparse
 import numpy as np
 import rclpy
 from rclpy.node import Node
-from scipy.spatial.transform import Rotation
 
 from builtin_interfaces.msg import Duration
 from control_msgs.msg import JointTrajectoryControllerState
@@ -37,7 +36,7 @@ from utils.policy_executor import PolicyExecutor
 
 
 class ReachPolicy(Node, PolicyExecutor):
-    """ROS2 node for executing reach policy on OMY robot."""
+    """ROS2 node for executing a reach policy on the OMY robot."""
 
     def __init__(self, model_dir: str, debug: bool):
         super().__init__('omy_reach_policy_node')
@@ -54,7 +53,7 @@ class ReachPolicy(Node, PolicyExecutor):
         self.iteration = 0
         self.has_joint_data = False
 
-        self.target_command = np.zeros(6)
+        self.target_command = np.zeros(7)
         self.previous_action = np.zeros(6)
         self.current_joint_positions = np.zeros(6)
         self.current_joint_velocities = np.zeros(6)
@@ -75,10 +74,12 @@ class ReachPolicy(Node, PolicyExecutor):
         self.get_logger().info("ReachPolicy node initialized.")
 
     def joint_state_callback(self, msg: JointTrajectoryControllerState):
+        """Callback to update current joint state from the controller feedback."""
         self.update_joint_state(msg.feedback.positions, msg.feedback.velocities)
         self.has_joint_data = True
 
     def create_trajectory_command(self, joint_positions: np.ndarray) -> JointTrajectory:
+        """Creates a JointTrajectory message from joint positions."""
         point = JointTrajectoryPoint()
         point.positions = joint_positions
         point.time_from_start = Duration(
@@ -92,6 +93,7 @@ class ReachPolicy(Node, PolicyExecutor):
         return joint_trajectory
 
     def broadcast_target_pose_tf(self):
+        """Publishes a TF transform for the target pose."""
         t = TransformStamped()
         t.header.stamp = self.get_clock().now().to_msg()
         t.header.frame_id = "world"
@@ -108,17 +110,19 @@ class ReachPolicy(Node, PolicyExecutor):
         self.br.sendTransform(t)
 
     def timer_callback(self):
+        """Main control loop: samples target, computes action, and publishes joint commands."""
         if not self.has_joint_data:
             return
 
-        command_interval = int(self.cfg.send_command_interval / self.cfg.step_size)
+        command_interval = int(self.cfg.send_command_interval / self.cfg.step_size) # interval in steps
+        phase = self.iteration % (2 * command_interval)
 
-        if self.iteration % (2*command_interval) == 0:
+        if phase == 0:
             self.target_command = self.cfg.sample_random_pose()
             self.broadcast_target_pose_tf()
             self.get_logger().info(f"New target command: {np.round(self.target_command, 4)}")
 
-        if self.iteration % (2*command_interval) < command_interval:
+        if phase < command_interval:
             joint_trajectory_msg = self.create_trajectory_command(self.default_pos)
             self.joint_trajectory_publisher.publish(joint_trajectory_msg)
         else:
@@ -132,10 +136,12 @@ class ReachPolicy(Node, PolicyExecutor):
         self.iteration += 1
 
     def update_joint_state(self, position, velocity) -> None:
+        """Updates internal joint state variables."""
         self.current_joint_positions = np.array(position[:self.num_joints], dtype=np.float32)
         self.current_joint_velocities = np.array(velocity[:self.num_joints], dtype=np.float32)
 
     def compute_observation(self, command: np.ndarray) -> np.ndarray:
+        """Builds the observation vector for the policy."""
         obs = np.zeros(25, dtype=np.float32)
         obs[:6] = self.current_joint_positions - self.default_pos
         obs[6:12] = self.current_joint_velocities
@@ -145,6 +151,7 @@ class ReachPolicy(Node, PolicyExecutor):
         return obs
 
     def forward(self, command: np.ndarray) -> np.ndarray:
+        """Runs policy forward to compute joint positions for a given command."""
         observation = self.compute_observation(command)
         if observation is None:
             return None
@@ -164,8 +171,8 @@ class ReachPolicy(Node, PolicyExecutor):
 
         return joint_positions
 
-
 def main(args=None):
+    """Entry point to initialize ROS2 and run the reach policy node."""
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--model_dir", type=str, required=True,
@@ -183,7 +190,6 @@ def main(args=None):
     rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()
-
 
 if __name__ == '__main__':
     main()
