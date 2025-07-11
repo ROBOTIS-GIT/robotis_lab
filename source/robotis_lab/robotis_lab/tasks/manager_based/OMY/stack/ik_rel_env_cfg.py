@@ -23,7 +23,7 @@ from isaaclab.controllers.differential_ik_cfg import DifferentialIKControllerCfg
 from isaaclab.envs.mdp.actions.actions_cfg import DifferentialInverseKinematicsActionCfg
 from isaaclab.utils import configclass
 
-from . import stack_joint_pos_env_cfg
+from . import joint_pos_env_cfg
 
 ##
 # Pre-defined configs
@@ -32,7 +32,7 @@ from robotis_lab.assets.OMY import OMY_CFG  # isort: skip
 
 
 @configclass
-class OMYCubeStackEnvCfg(stack_joint_pos_env_cfg.OMYCubeStackEnvCfg):
+class OMYCubeStackEnvCfg(joint_pos_env_cfg.OMYCubeStackEnvCfg):
     def __post_init__(self):
         # post init of parent
         super().__post_init__()
