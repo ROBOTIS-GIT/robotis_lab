@@ -88,12 +88,12 @@ class CommandsCfg:
         resampling_time_range=(2.0, 2.0),
         debug_vis=True,
         ranges=mdp.UniformPoseCommandCfg.Ranges(
-            pos_x=(0.25, 0.55),
-            pos_y=(-0.2, 0.2),
-            pos_z=(0.2, 0.4),
-            roll=(math.pi / 2 - math.pi / 8, math.pi / 2 + math.pi / 8),
-            pitch=(- math.pi / 8, math.pi / 8),
-            yaw=(math.pi / 2 - math.pi / 8, math.pi / 2 + math.pi / 8),
+            pos_x=(0.25, 0.45),
+            pos_y=(-0.15, 0.15),
+            pos_z=(0.3, 0.45),
+            roll=(-math.pi / 4, math.pi / 4),
+            pitch=(0.0, 0.0),
+            yaw=(math.pi / 4, math.pi * 3 / 4),
         ),
     )
 
@@ -154,12 +154,12 @@ class RewardsCfg:
     )
     end_effector_position_tracking_fine_grained = RewTerm(
         func=mdp.position_command_error_tanh,
-        weight=0.1,
+        weight=0.12,
         params={"asset_cfg": SceneEntityCfg("robot", body_names=MISSING), "std": 0.1, "command_name": "ee_pose"},
     )
     end_effector_orientation_tracking = RewTerm(
         func=mdp.orientation_command_error,
-        weight=-0.1,
+        weight=-0.12,
         params={"asset_cfg": SceneEntityCfg("robot", body_names=MISSING), "command_name": "ee_pose"},
     )
 
@@ -186,11 +186,9 @@ class CurriculumCfg:
     action_rate = CurrTerm(
         func=mdp.modify_reward_weight, params={"term_name": "action_rate", "weight": -0.005, "num_steps": 4500}
     )
-
     joint_vel = CurrTerm(
         func=mdp.modify_reward_weight, params={"term_name": "joint_vel", "weight": -0.001, "num_steps": 4500}
     )
-
 
 ##
 # Environment configuration

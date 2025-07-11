@@ -1,5 +1,13 @@
 # Robotis Lab Release Notes
 
+0.1.1 (2025-07-11)
+------------------
+### Sim2Real Deployment Support Added
+* Developed Sim2Real deployment pipeline for the OMY Reach task.
+* Enabled running policies trained in Isaac Sim on real-world OMY robots.
+* Provided detailed usage instructions and demonstration videos in the README.
+* Refactored folder structure for source and scripts to improve maintainability.
+
 0.1.0 (2025-07-01)
 ------------------
 ### Initial Release
