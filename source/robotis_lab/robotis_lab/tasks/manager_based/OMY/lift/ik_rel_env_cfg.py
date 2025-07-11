@@ -28,7 +28,7 @@ from . import joint_pos_env_cfg
 ##
 # Pre-defined configs
 ##
-from robotis_lab.assets.OMY import OMY_LIFT_CFG  # isort: skip
+from robotis_lab.assets.OMY import OMY_HIGH_PD_CFG  # isort: skip
 
 
 @configclass
@@ -39,7 +39,7 @@ class OMYCubeLiftEnvCfg(joint_pos_env_cfg.OMYCubeLiftEnvCfg):
 
         # Set OMY as robot
         # We switch here to a stiffer PD controller for IK tracking to be better.
-        self.scene.robot = OMY_LIFT_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
+        self.scene.robot = OMY_HIGH_PD_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
 
         # Set actions for the specific robot type (OMY)
         self.actions.arm_action = DifferentialInverseKinematicsActionCfg(

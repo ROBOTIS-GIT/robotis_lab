@@ -34,7 +34,7 @@ from robotis_lab.tasks.manager_based.OMY.lift.lift_env_cfg import LiftEnvCfg
 ##
 # Pre-defined configs
 ##
-from robotis_lab.assets.OMY import OMY_LIFT_CFG  # isort: skip
+from robotis_lab.assets.OMY import OMY_HIGH_PD_CFG  # isort: skip
 
 
 @configclass
@@ -44,7 +44,7 @@ class OMYCubeLiftEnvCfg(LiftEnvCfg):
         super().__post_init__()
 
         # Set OMY as robot
-        self.scene.robot = OMY_LIFT_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
+        self.scene.robot = OMY_HIGH_PD_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
 
         # Set actions for the specific robot type (OMY)
         self.actions.arm_action = mdp.JointPositionActionCfg(
