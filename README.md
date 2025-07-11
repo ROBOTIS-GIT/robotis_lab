@@ -142,19 +142,20 @@ python scripts/imitation_learning/robomimic/play.py \
 --checkpoint /PATH/TO/desired_model_checkpoint.pth
 ```
 
-### Sim2Real Deployment
+
+## Sim2Real Deployment
 We provide a Sim2Real pipeline to deploy policies trained in Isaac Lab simulation directly onto the real OMY robot.
 
 <details>
 <summary>🎥 Show demo video</summary>
 
-![OMY Sim2Real Demo](https://github.com/user-attachments/assets/c7bd5dac-1578-4ba1-845f-afaeefc1677c)
+https://github.com/user-attachments/assets/c7bd5dac-1578-4ba1-845f-afaeefc1677c
 
 </details>
 
 > [!IMPORTANT]
 > More on OMY Hardware Setup:
-> For details on how to set up and operate the OMY robot, please refer to the [open_manipulator](https://isaac-sim.github.io/IsaacLab)
+> For details on how to set up and operate the OMY robot, please refer to the [open_manipulator repo](https://github.com/ROBOTIS-GIT/open_manipulator.git)
 
 In this pipeline:
 - The trained policy (exported as a TorchScript .pt file) is executed on the real robot using ROS 2.
@@ -163,18 +164,10 @@ In this pipeline:
 
 Prerequisites
 - A trained policy (under logs/rsl_rl/reach_omy/<TIMESTAMP>).
-- ROS 2 Humble (or later) installed and sourced.
+- ROS 2 Jazzy installed and sourced.
 - Robot hardware must be ready and controllable via the joint trajectory interface.
 
 Run Sim2Real Reach Policy on OMY
-```bash
-python3 scripts/sim2real/OMY/reach/run_omy_reach.py --model_dir=2025-07-10_08-47-09
-```
-
-Replace <2025-07-10_08-47-09> with the actual timestamp folder name under:
-```bash
-logs/rsl_rl/reach_omy/
-```
 
 OMY Reach task
 
@@ -187,4 +180,9 @@ python scripts/reinforcement_learning/rsl_rl/play.py --task RobotisLab-Reach-OMY
 
 # Sim2Real
 python3 scripts/sim2real/OMY/reach/run_omy_reach.py --model_dir=<2025-07-10_08-47-09>
+```
+
+Replace <2025-07-10_08-47-09> with the actual timestamp folder name under:
+```bash
+logs/rsl_rl/reach_omy/
 ```
