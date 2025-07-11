@@ -64,15 +64,13 @@ class PolicyExecutor:
 
         print(f"{'Action scale:':<18} {self.action_scale}")
 
-        self.max_effort, self.max_vel, self.stiffness, self.damping, self.default_pos, self.default_vel = get_robot_joint_properties(
+        self.stiffness, self.damping, self.default_pos, self.default_vel = get_robot_joint_properties(
             self.policy_env_params, joint_names
         )
         self.num_joints = len(joint_names)
 
         print("\n--- Robot joint properties ---")
         print(f"{'Number of joints:':<18} {self.num_joints}")
-        print(f"{'Max effort:':<18} {self.max_effort}")
-        print(f"{'Max velocity:':<18} {self.max_vel}")
         print(f"{'Stifness:':<18} {self.stiffness}")
         print(f"{'Damping:':<18} {self.damping}")
         print(f"{'Default position:':<18} {self.default_pos}")

@@ -72,8 +72,6 @@ def get_robot_joint_properties(
     actuator_data = data.get("scene").get("robot").get("actuators")
     stiffness = {}
     damping = {}
-    effort_limits = {}
-    velocity_limits = {}
     default_pos = {}
     default_vel = {}
     joint_names_expr_list = []
@@ -83,30 +81,9 @@ def get_robot_joint_properties(
         joint_names_expr = actuator_config.get("joint_names_expr")
         joint_names_expr_list.extend(joint_names_expr)
 
-        effort_limit = actuator_config.get("effort_limit")
-        velocity_limit = actuator_config.get("velocity_limit")
         joint_stiffness = actuator_config.get("stiffness")
         joint_damping = actuator_config.get("damping")
 
-        if isinstance(effort_limit, (float, int)) or effort_limit is None:
-            if effort_limit is None or effort_limit == float("inf"):
-                effort_limit = float(sys.maxsize)
-            for names in joint_names_expr:
-                effort_limits[names] = float(effort_limit)
-        elif isinstance(effort_limit, dict):
-            effort_limits.update(effort_limit)
-        else:
-            print(f"Failed to parse effort limit, expected float, int, or dict, got: {type(effort_limit)}")
-
-        if isinstance(velocity_limit, (float, int)) or velocity_limit is None:
-            if velocity_limit is None or velocity_limit == float("inf"):
-                velocity_limit = float(sys.maxsize)
-            for names in joint_names_expr:
-                velocity_limits[names] = float(velocity_limit)
-        elif isinstance(velocity_limit, dict):
-            velocity_limits.update(velocity_limit)
-        else:
-            print(f"Failed to parse velocity limit, expected float, int, or dict, got: {type(velocity_limit)}")
 
         if isinstance(joint_stiffness, (float, int)) or joint_stiffness is None:
             if joint_stiffness is None:
@@ -154,8 +131,6 @@ def get_robot_joint_properties(
 
     stiffness_inorder = []
     damping_inorder = []
-    effort_limits_inorder = []
-    velocity_limits_inorder = []
     default_pos_inorder = []
     default_vel_inorder = []
 
@@ -172,17 +147,6 @@ def get_robot_joint_properties(
                 else:
                     damping_inorder.append(0)
                     print(f"{joint} damping not found, setting to 0")
-                if pattern in effort_limits:
-                    effort_limits_inorder.append(effort_limits[pattern])
-                else:
-                    effort_limits_inorder.append(0)
-                    print(f"{joint} effort limit not found, setting to 0")
-                if pattern in velocity_limits:
-                    velocity_limits_inorder.append(velocity_limits[pattern])
-                else:
-                    velocity_limits_inorder.append(0)
-                    print(f"{joint} velocity limit not found, setting to 0")
-                break
 
         default_position_found = False
         for pattern in default_pos:
@@ -205,8 +169,6 @@ def get_robot_joint_properties(
             print(f"{joint} default velocity not found, setting to 0")
 
     return (
-        effort_limits_inorder,
-        velocity_limits_inorder,
         stiffness_inorder,
         damping_inorder,
         default_pos_inorder,
