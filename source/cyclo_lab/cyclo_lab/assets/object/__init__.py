@@ -44,3 +44,7 @@ from .tooth_brush import *
 from .scissors_ring import *
 from .pliers_ring import *
 from .screw_driver_ring import *
+from .peanut_mix_bag import *
+from .tteokbokki_cup_noodle import *
+from .roasted_chestnut_bag import *
+from .jelly_bag import *

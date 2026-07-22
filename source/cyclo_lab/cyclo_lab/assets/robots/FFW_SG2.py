@@ -14,11 +14,29 @@
 #
 # Author: Taehyeong Kim
 
-from isaaclab.sim import UsdFileCfg, RigidBodyPropertiesCfg, ArticulationRootPropertiesCfg
-from isaaclab.assets.articulation import ArticulationCfg
+from copy import deepcopy
+
 from isaaclab.actuators import ImplicitActuatorCfg
+from isaaclab.assets.articulation import ArticulationCfg
+from isaaclab.sim import (
+    ArticulationRootPropertiesCfg,
+    RigidBodyPropertiesCfg,
+    UsdFileCfg,
+)
 
 from cyclo_lab.assets.robots import CYCLO_LAB_ASSETS_DATA_DIR
+
+
+SG2_SWERVE_STEERING_JOINTS = ("left_wheel_steer", "right_wheel_steer", "rear_wheel_steer")
+SG2_SWERVE_WHEEL_JOINTS = ("left_wheel_drive", "right_wheel_drive", "rear_wheel_drive")
+SG2_SWERVE_MODULE_X_OFFSETS = (0.1371, 0.1371, -0.2899)
+SG2_SWERVE_MODULE_Y_OFFSETS = (0.2554, -0.2554, 0.0)
+SG2_SWERVE_MODULE_ANGLE_OFFSETS = (0.0, 0.0, 0.0)
+SG2_SWERVE_WHEEL_RADIUS = 0.0865
+SG2_BRINGUP_LIFT_EFFORT_LIMIT = 5_000_000.0
+SG2_BRINGUP_LIFT_STIFFNESS = 250_000.0
+SG2_BRINGUP_LIFT_DAMPING = 5_000.0
+
 
 FFW_SG2_CFG = ArticulationCfg(
     spawn=UsdFileCfg(
@@ -36,11 +54,6 @@ FFW_SG2_CFG = ArticulationCfg(
     ),
     init_state=ArticulationCfg.InitialStateCfg(
         joint_pos={
-            # # Swerve base joints
-            # "left_wheel_drive": 0.0, "left_wheel_steer": 0.0,
-            # "right_wheel_drive": 0.0, "right_wheel_steer": 0.0,
-            # "rear_wheel_drive": 0.0, "rear_wheel_steer": 0.0,
-
             # Left arm joints
             **{f"arm_l_joint{i + 1}": 0.0 for i in range(7)},
             # Right arm joints
@@ -59,25 +72,12 @@ FFW_SG2_CFG = ArticulationCfg(
         },
     ),
     actuators={
-        # Actuators for swerve base
-        # "base": ImplicitActuatorCfg(
-        #     joint_names_expr=[
-        #         "left_wheel_drive", "left_wheel_steer",
-        #         "right_wheel_drive", "right_wheel_steer",
-        #         "rear_wheel_drive", "rear_wheel_steer",
-        #     ],
-        #     velocity_limit_sim=30.0,
-        #     effort_limit_sim=100000.0,
-        #     stiffness=10000.0,
-        #     damping=100.0,
-        # ),
-
         # Actuator for vertical lift joint
         "lift": ImplicitActuatorCfg(
             joint_names_expr=["lift_joint"],
             velocity_limit_sim=0.2,
-            effort_limit_sim=1000000.0,
-            stiffness=10000.0,
+            effort_limit_sim=1_000_000.0,
+            stiffness=10_000.0,
             damping=100.0,
         ),
 
@@ -102,7 +102,7 @@ FFW_SG2_CFG = ArticulationCfg(
             stiffness=600.0,
             damping=20.0,
         ),
-        "DP-42" : ImplicitActuatorCfg(
+        "DP-42": ImplicitActuatorCfg(
             joint_names_expr=[
                 "arm_l_joint7",
                 "arm_r_joint7",
@@ -138,3 +138,42 @@ FFW_SG2_CFG = ArticulationCfg(
         ),
     }
 )
+
+
+def _tune_sg2_bringup_lift(robot_cfg: ArticulationCfg) -> None:
+    lift_actuator = robot_cfg.actuators["lift"]
+    lift_actuator.effort_limit_sim = SG2_BRINGUP_LIFT_EFFORT_LIMIT
+    lift_actuator.stiffness = SG2_BRINGUP_LIFT_STIFFNESS
+    lift_actuator.damping = SG2_BRINGUP_LIFT_DAMPING
+
+
+def _enable_sg2_swerve_actuators(robot_cfg: ArticulationCfg) -> None:
+    robot_cfg.init_state.joint_pos.update(
+        {steering_joint: 0.0 for steering_joint in SG2_SWERVE_STEERING_JOINTS}
+    )
+    robot_cfg.init_state.joint_pos.update(
+        {wheel_joint: 0.0 for wheel_joint in SG2_SWERVE_WHEEL_JOINTS}
+    )
+    robot_cfg.actuators = {
+        "base_steer": ImplicitActuatorCfg(
+            joint_names_expr=list(SG2_SWERVE_STEERING_JOINTS),
+            velocity_limit_sim=10.0,
+            effort_limit_sim=100000.0,
+            stiffness=10000.0,
+            damping=100.0,
+        ),
+        "base_drive": ImplicitActuatorCfg(
+            joint_names_expr=list(SG2_SWERVE_WHEEL_JOINTS),
+            velocity_limit_sim=50.0,
+            effort_limit_sim=100000.0,
+            stiffness=0.0,
+            damping=100.0,
+        ),
+        **robot_cfg.actuators,
+    }
+
+
+# Keeps the SG2 USD fixed-root and lets bringup integrate /cmd_vel into root pose.
+FFW_SG2_KINEMATIC_CFG = deepcopy(FFW_SG2_CFG)
+_tune_sg2_bringup_lift(FFW_SG2_KINEMATIC_CFG)
+_enable_sg2_swerve_actuators(FFW_SG2_KINEMATIC_CFG)
