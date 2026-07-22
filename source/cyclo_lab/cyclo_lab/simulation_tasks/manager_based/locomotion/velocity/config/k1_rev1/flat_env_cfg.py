@@ -303,8 +303,6 @@ class K1Rev1FlatEnvCfg(LocomotionVelocityEnvCfg):
         self.curriculum.terrain_levels = None
 
         # Randomization
-        self.events.physics_material.params["static_friction_range"] = (0.8, 0.8)
-        self.events.physics_material.params["dynamic_friction_range"] = (0.6, 0.6)
         self.events.push_robot.interval_range_s = (10.0, 15.0)
         self.events.base_external_force_torque.mode = "reset"
         self.events.base_external_force_torque.interval_range_s = None
