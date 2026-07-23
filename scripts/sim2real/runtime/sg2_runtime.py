@@ -15,6 +15,7 @@
 # Author: Howon Kim
 
 import argparse
+import math
 import os
 import sys
 import threading
@@ -91,7 +92,7 @@ from robotis_dds_python.idl.trajectory_msgs.msg import JointTrajectory_
 from robotis_dds_python.tools.topic_manager import TopicManager
 
 from cyclo_lab.assets.robots import (
-    FFW_SG2_KINEMATIC_CFG,
+    FFW_SG2_PHYSICS_CFG,
     SG2_SWERVE_MODULE_ANGLE_OFFSETS,
     SG2_SWERVE_MODULE_X_OFFSETS,
     SG2_SWERVE_MODULE_Y_OFFSETS,
@@ -101,14 +102,21 @@ from cyclo_lab.assets.robots import (
 )
 from common.environment import ROBOTIS_SHOWROOM_USD_PATH, make_robotis_showroom_environment_cfg
 from common.odometry import SwerveOdometry, yaw_to_quaternion
-from common.swerve_drive import SwerveDriveController, SwerveModule
+from common.swerve_drive import SpeedLimiter, SwerveControllerConfig, SwerveDriveController, SwerveModule
 
 
 SG2_ROBOT_POS = (1.6, 2.5, 0.0)
+SG2_STEP_HZ = 60.0
+SG2_ENVIRONMENT_GROUND_Z = 0.0
 SG2_OVERVIEW_CAMERA_EYE = (2.2, -2.0, 1.6)
 SG2_OVERVIEW_CAMERA_TARGET = (0.0, 0.0, 0.8)
 SG2_HEAD_CAMERA_NAME = "cam_head"
 SG2_HEAD_CAMERA_TOPIC = "/zed/zed_node/left/image_rect_color/compressed"
+SG2_SWERVE_STEERING_LIMIT_LOWER = -math.pi
+SG2_SWERVE_STEERING_LIMIT_UPPER = math.pi
+SG2_SWERVE_STEERING_ANGULAR_VELOCITY_LIMIT = 2.0
+SG2_SWERVE_LINEAR_ACCELERATION_LIMIT = 0.6
+SG2_SWERVE_ANGULAR_ACCELERATION_LIMIT = 1.2
 
 SG2_LEFT_ARM_JOINT_NAMES = tuple(f"arm_l_joint{index}" for index in range(1, 8))
 SG2_RIGHT_ARM_JOINT_NAMES = tuple(f"arm_r_joint{index}" for index in range(1, 8))
@@ -133,7 +141,7 @@ class SG2BringupSceneCfg(InteractiveSceneCfg):
 
 
 def _make_robot_cfg() -> ArticulationCfg:
-    robot_cfg = deepcopy(FFW_SG2_KINEMATIC_CFG)
+    robot_cfg = deepcopy(FFW_SG2_PHYSICS_CFG)
     robot_cfg.spawn.rigid_props.disable_gravity = False
     robot_cfg.init_state.pos = SG2_ROBOT_POS
     return robot_cfg
@@ -226,7 +234,28 @@ class SG2DdsBridge:
         self.publish_lift_target_state = publish_lift_target_state
         self._warned_camera_publish_error = False
         self.swerve_controller = (
-            SwerveDriveController(swerve_modules, wheel_radius) if swerve_modules else None
+            SwerveDriveController(
+                swerve_modules,
+                wheel_radius,
+                config=SwerveControllerConfig(
+                    enabled_speed_limits=True,
+                    linear_x_limiter=SpeedLimiter(
+                        has_acceleration_limits=True,
+                        max_acceleration=SG2_SWERVE_LINEAR_ACCELERATION_LIMIT,
+                    ),
+                    linear_y_limiter=SpeedLimiter(
+                        has_acceleration_limits=True,
+                        max_acceleration=SG2_SWERVE_LINEAR_ACCELERATION_LIMIT,
+                    ),
+                    angular_z_limiter=SpeedLimiter(
+                        has_acceleration_limits=True,
+                        max_acceleration=SG2_SWERVE_ANGULAR_ACCELERATION_LIMIT,
+                    ),
+                    steering_angular_velocity_limit=SG2_SWERVE_STEERING_ANGULAR_VELOCITY_LIMIT,
+                ),
+            )
+            if swerve_modules
+            else None
         )
         self.odometry = (
             SwerveOdometry(
@@ -238,7 +267,6 @@ class SG2DdsBridge:
             else None
         )
         self._last_swerve_update_time = time.monotonic()
-        self._initial_root_state = self.robot.data.root_state_w.clone()
         self.running = True
         self.lock = threading.Lock()
         self.pending_positions: dict[str, float] = {}
@@ -516,29 +544,18 @@ class SG2DdsBridge:
         if self.odometry is None or not self.swerve_modules or self._missing_swerve_joints:
             return
 
-        linear_x, linear_y, angular_z = self._current_cmd_vel()
-        if self.odometry.update_from_command(linear_x, linear_y, angular_z, dt):
-            self._write_kinematic_base_state()
-
-    def _write_kinematic_base_state(self):
-        if self.odometry is None:
-            return
-
-        state = self.odometry.state()
-        root_state = self.robot.data.root_state_w.clone()
-        root_state[:, 0] = self._initial_root_state[:, 0] + state.x
-        root_state[:, 1] = self._initial_root_state[:, 1] + state.y
-        root_state[:, 2] = self._initial_root_state[:, 2]
-
-        quat_x, quat_y, quat_z, quat_w = yaw_to_quaternion(state.yaw)
-        root_state[:, 3] = quat_w
-        root_state[:, 4] = quat_x
-        root_state[:, 5] = quat_y
-        root_state[:, 6] = quat_z
-
-        root_state[:, 7:] = 0.0
-
-        self.robot.write_root_state_to_sim(root_state)
+        steering_positions = [
+            float(value) + module.angle_offset
+            for value, module in zip(
+                self.robot.data.joint_pos[0, self._swerve_steering_joint_ids].detach().cpu().tolist(),
+                self.swerve_modules,
+            )
+        ]
+        wheel_velocities = [
+            float(value)
+            for value in self.robot.data.joint_vel[0, self._swerve_wheel_joint_ids].detach().cpu().tolist()
+        ]
+        self.odometry.update(steering_positions, wheel_velocities, dt)
 
     # Publish robot state and close DDS resources
     def publish_joint_states(self):
@@ -724,8 +741,8 @@ def _swerve_modules() -> list[SwerveModule]:
             x_offset=SG2_SWERVE_MODULE_X_OFFSETS[index],
             y_offset=SG2_SWERVE_MODULE_Y_OFFSETS[index],
             angle_offset=SG2_SWERVE_MODULE_ANGLE_OFFSETS[index],
-            steering_limit_lower=cfg.AI_WORKER_SWERVE_STEERING_LIMIT_LOWER,
-            steering_limit_upper=cfg.AI_WORKER_SWERVE_STEERING_LIMIT_UPPER,
+            steering_limit_lower=SG2_SWERVE_STEERING_LIMIT_LOWER,
+            steering_limit_upper=SG2_SWERVE_STEERING_LIMIT_UPPER,
             wheel_speed_limit_lower=cfg.AI_WORKER_SWERVE_WHEEL_SPEED_LIMIT_LOWER,
             wheel_speed_limit_upper=cfg.AI_WORKER_SWERVE_WHEEL_SPEED_LIMIT_UPPER,
         )
@@ -756,7 +773,7 @@ def _print_robot_info(robot):
 
 def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene, bridge: SG2DdsBridge):
     sim_dt = sim.get_physics_dt()
-    step_period = 1.0 / cfg.STEP_HZ if cfg.STEP_HZ > 0 else 0.0
+    step_period = 1.0 / SG2_STEP_HZ if SG2_STEP_HZ > 0 else 0.0
     publish_period = 1.0 / cfg.PUBLISH_HZ if cfg.PUBLISH_HZ > 0 else 0.0
     last_publish = 0.0
     last_step = time.time()
@@ -791,14 +808,14 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene, bri
 
 def main():
     camera_enabled = args_cli.enable_camera
-    robot_cfg_template = FFW_SG2_KINEMATIC_CFG
+    robot_cfg_template = FFW_SG2_PHYSICS_CFG
     usd_path = robot_cfg_template.spawn.usd_path
     if not os.path.exists(usd_path):
         raise FileNotFoundError(f"SG2 USD not found: {usd_path}")
 
     sim_cfg = sim_utils.SimulationCfg(
         device=args_cli.device,
-        dt=1.0 / cfg.STEP_HZ,
+        dt=1.0 / SG2_STEP_HZ,
         render_interval=cfg.RENDER_INTERVAL,
     )
     sim = sim_utils.SimulationContext(sim_cfg)
@@ -810,8 +827,9 @@ def main():
     if args_cli.enable_environment:
         if "://" not in environment_usd_path and not os.path.exists(environment_usd_path):
             raise FileNotFoundError(f"Environment USD not found: {environment_usd_path}")
-        scene_cfg.ground.init_state.pos = (0.0, 0.0, -0.03)
-        scene_cfg.ground.spawn.color = (0.45, 0.45, 0.45)
+        scene_cfg.ground.init_state.pos = (0.0, 0.0, SG2_ENVIRONMENT_GROUND_Z)
+        scene_cfg.ground.spawn.visible = True
+        scene_cfg.ground.spawn.color = None
         scene_cfg.environment = make_robotis_showroom_environment_cfg(environment_usd_path)
     if camera_enabled:
         scene_cfg.cam_head = _make_head_camera_cfg()
@@ -861,7 +879,7 @@ def main():
     if _mobile_base_enabled():
         print(f"[DDS] Publishing odometry: {cfg.ODOM_TOPIC} ({cfg.ODOM_FRAME} -> {bridge.base_frame})")
         print(f"[DDS] Applying swerve cmd_vel: {cfg.CMD_VEL_TOPIC}")
-        print("[INFO] SG2 base integration: kinematic cmd_vel")
+        print("[INFO] SG2 base integration: wheel-contact physics")
     if bridge.publish_lift_target_state:
         print("[DDS] Publishing lift_joint target in joint_states to keep incremental lift commands stable.")
     if not args_cli.disable_tf:

@@ -24,6 +24,7 @@ from isaaclab.assets import AssetBaseCfg
 from isaaclab.sim.spawners.from_files import from_files
 from isaaclab.sim.utils import bind_physics_material, clone, make_uninstanceable
 from isaacsim.core.utils.stage import get_current_stage
+from pxr import Usd, UsdGeom, UsdPhysics
 
 
 SIMPLE_WAREHOUSE_ENVIRONMENT_USD_PATH = (
@@ -59,6 +60,28 @@ ENVIRONMENT_PHYSICS_MATERIAL = sim_utils.RigidBodyMaterialCfg(
 )
 
 
+def _make_showroom_floor_visual_only(prim_path: str) -> None:
+    stage = get_current_stage()
+    showroom_prim = stage.GetPrimAtPath(prim_path)
+    if not showroom_prim.IsValid():
+        return
+
+    visual_only_paths = []
+    for prim in Usd.PrimRange(showroom_prim):
+        prim_path_text = str(prim.GetPath())
+        if not prim_path_text.endswith("/ShowroomShell/Floor"):
+            continue
+
+        UsdGeom.Imageable(prim).MakeVisible()
+        if prim.HasAPI(UsdPhysics.CollisionAPI):
+            collision_api = UsdPhysics.CollisionAPI(prim)
+            collision_api.CreateCollisionEnabledAttr(False).Set(False)
+        visual_only_paths.append(prim_path_text)
+
+    if visual_only_paths:
+        print("[Robotis showroom] using visual-only showroom floor over Isaac ground plane contact.")
+
+
 @clone
 def spawn_environment_with_friction(prim_path, cfg, translation=None, orientation=None, **kwargs):
     """Spawn the environment USD and bind a high-friction material to its collision geometry."""
@@ -67,6 +90,7 @@ def spawn_environment_with_friction(prim_path, cfg, translation=None, orientatio
     material_path = f"{prim_path}/environmentPhysicsMaterial"
     ENVIRONMENT_PHYSICS_MATERIAL.func(material_path, ENVIRONMENT_PHYSICS_MATERIAL)
     bind_physics_material(prim_path, material_path)
+    _make_showroom_floor_visual_only(prim_path)
 
     return prim
 
