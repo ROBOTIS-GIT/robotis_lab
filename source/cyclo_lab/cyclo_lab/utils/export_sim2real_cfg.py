@@ -152,6 +152,22 @@ def _collect_export_context(env: ManagerBasedRLEnv) -> _ExportContext:
     )
 
 
+def _default_joint_position_by_name(context: _ExportContext) -> dict[str, Any]:
+    """Return nominal joint positions, excluding per-environment domain randomization."""
+    nominal = getattr(context.asset.data, "default_joint_pos_nominal", None)
+    if nominal is None:
+        nominal = context.asset.data.default_joint_pos[0]
+    if nominal.ndim == 2:
+        nominal = nominal[0]
+    values = _tensor_to_list(nominal)
+    if len(values) != len(context.asset_joint_names):
+        raise ValueError(
+            f"Nominal default joint positions have {len(values)} values for "
+            f"{len(context.asset_joint_names)} asset joints."
+        )
+    return dict(zip(context.asset_joint_names, values))
+
+
 def _export_joint_properties(context: _ExportContext) -> dict[str, _CfgDict]:
     asset = context.asset
     joint_names = context.policy_joint_names
@@ -160,7 +176,8 @@ def _export_joint_properties(context: _ExportContext) -> dict[str, _CfgDict]:
     joint_properties = {}
     stiffness = _tensor_to_list(asset.data.default_joint_stiffness[0, joint_ids])
     damping = _tensor_to_list(asset.data.default_joint_damping[0, joint_ids])
-    default_joint_pos = _tensor_to_list(asset.data.default_joint_pos[0, joint_ids])
+    default_position_by_name = _default_joint_position_by_name(context)
+    default_joint_pos = [default_position_by_name[joint_name] for joint_name in joint_names]
     for joint_name, default_position, joint_stiffness, joint_damping in zip(
         joint_names, default_joint_pos, stiffness, damping
     ):
@@ -206,9 +223,15 @@ def _action_scale(term_cfg, action_term) -> list[Any]:
     return _tensor_to_list(action_term._scale[0])
 
 
-def _action_offset(term_cfg, action_term) -> list[Any]:
+def _action_offset(
+    term_cfg,
+    action_term,
+    action_joint_names: list[str],
+    context: _ExportContext,
+) -> list[Any]:
     if term_cfg.use_default_offset:
-        return _tensor_to_list(action_term._offset[0])
+        default_position_by_name = _default_joint_position_by_name(context)
+        return [default_position_by_name[joint_name] for joint_name in action_joint_names]
     return [0.0 for _ in range(action_term.action_dim)]
 
 
@@ -232,7 +255,7 @@ def _export_action_term(action_name: str, action_term, context: _ExportContext) 
         term_cfg.clip = _reorder_by_joint_name(clip, action_joint_names, policy_joint_names, "action clip")
 
     if hasattr(term_cfg, "use_default_offset"):
-        offset = _action_offset(term_cfg, action_term)
+        offset = _action_offset(term_cfg, action_term, action_joint_names, context)
         term_cfg.offset = _reorder_by_joint_name(offset, action_joint_names, policy_joint_names, "action offset")
 
     return _strip_action_cfg_for_export(term_cfg.to_dict())
