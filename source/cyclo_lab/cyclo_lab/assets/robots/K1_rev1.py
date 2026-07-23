@@ -123,10 +123,18 @@ K1_REV1_CFG = ArticulationCfg(
                 ".*_knee_joint": 0.01,
             },
         ),
-        "feet": ImplicitActuatorCfg(
+        "ankle_pitch": ImplicitActuatorCfg(
+            effort_limit_sim=MAX_TORQUE_QC080_240_R020_RE,
+            velocity_limit_sim=MAX_SPEED_QC080_240_R020_RE,
+            joint_names_expr=[".*_ankle_pitch_joint"],
+            stiffness=20.0,
+            damping=2.0,
+            armature=0.01,
+        ),
+        "ankle_roll": ImplicitActuatorCfg(
             effort_limit_sim=MAX_TORQUE_QC060_200_R020_RE,
             velocity_limit_sim=MAX_SPEED_QC060_200_R020_RE,
-            joint_names_expr=[".*_ankle_pitch_joint", ".*_ankle_roll_joint"],
+            joint_names_expr=[".*_ankle_roll_joint"],
             stiffness=20.0,
             damping=2.0,
             armature=0.01,
@@ -265,8 +273,16 @@ K1_REV1_INERTIA_TUNED_CFG = ArticulationCfg(
                 ".*_knee_joint": ARMATURE_QC080_240_R020_RE,
             },
         ),
-        "feet": ImplicitActuatorCfg(
-            joint_names_expr=[".*_ankle_pitch_joint", ".*_ankle_roll_joint"],
+        "ankle_pitch": ImplicitActuatorCfg(
+            joint_names_expr=[".*_ankle_pitch_joint"],
+            effort_limit_sim=MAX_TORQUE_QC080_240_R020_RE,
+            velocity_limit_sim=MAX_SPEED_QC080_240_R020_RE,
+            stiffness=2.0 * STIFFNESS_QC080_240_R020_RE,
+            damping=2.0 * DAMPING_QC080_240_R020_RE,
+            armature=2.0 * ARMATURE_QC080_240_R020_RE,
+        ),
+        "ankle_roll": ImplicitActuatorCfg(
+            joint_names_expr=[".*_ankle_roll_joint"],
             effort_limit_sim=MAX_TORQUE_QC060_200_R020_RE,
             velocity_limit_sim=MAX_SPEED_QC060_200_R020_RE,
             stiffness=2.0 * STIFFNESS_QC060_200_R020_RE,
