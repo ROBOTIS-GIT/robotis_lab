@@ -2,6 +2,13 @@
 Changelog for package cyclo_lab
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+2.0.2 (2026-07-24)
+------------------
+* Updated the K1 ankle pitch actuator configuration to use the Q80 actuator.
+* Added nominal joint positions to the sim-to-real configuration export.
+* Updated the ``ai_sapiens`` submodule pointer.
+* Contributors: Kiwoong Park
+
 2.0.1 (2026-07-22)
 ------------------
 * Updated the ``ai_sapiens`` submodule pointer.
