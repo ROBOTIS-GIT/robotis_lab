@@ -29,7 +29,7 @@ from isaaclab.app import AppLauncher
 
 # add argparse arguments
 parser = argparse.ArgumentParser(description="Inference script for cyclo_lab environments.")
-parser.add_argument("--task", type=str, required=True, help="Name of the task.")
+parser.add_argument("--task", type=str, default=None, help="Name of the task.")
 parser.add_argument("--seed", type=int, default=42, help="Seed for the environment.")
 parser.add_argument("--step_hz", type=int, default=60, help="Environment stepping rate in Hz.")
 parser.add_argument("--robot_type", type=str, default="OMY", choices=['OMY', 'FFW_SG2'], help="Type of robot to use for teleoperation.")
@@ -37,6 +37,8 @@ parser.add_argument("--robot_type", type=str, default="OMY", choices=['OMY', 'FF
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
+if args_cli.task is None:
+    parser.error("the following arguments are required: --task")
 app_launcher = AppLauncher(vars(args_cli))
 simulation_app = app_launcher.app
 
@@ -46,9 +48,6 @@ import gymnasium as gym
 
 from isaaclab.envs import ManagerBasedRLEnv
 from isaaclab_tasks.utils import parse_env_cfg
-
-import sys, os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import cyclo_lab
 
@@ -90,10 +89,10 @@ def main():
 
     # teleop interface
     if args_cli.robot_type == "OMY":
-        from dds_sdk.omy_sdk import OMYSdk
+        from cyclo_lab.sim2real.teleop.omy_sdk import OMYSdk
         teleop_interface = OMYSdk(env, mode='inference')
     elif args_cli.robot_type == "FFW_SG2":
-        from dds_sdk.ffw_sg2_sdk import FFWSG2Sdk
+        from cyclo_lab.sim2real.teleop.ffw_sg2_sdk import FFWSG2Sdk
         teleop_interface = FFWSG2Sdk(env, mode='inference')
     else:
         raise ValueError(f"Unsupported robot type: {args_cli.robot_type}")

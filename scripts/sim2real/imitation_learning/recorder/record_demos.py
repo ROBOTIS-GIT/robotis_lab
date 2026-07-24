@@ -51,7 +51,6 @@ app_launcher_args = vars(args_cli)
 app_launcher = AppLauncher(app_launcher_args)
 simulation_app = app_launcher.app
 
-import os
 import time
 import torch
 import gymnasium as gym
@@ -61,10 +60,8 @@ from isaaclab_tasks.utils import parse_env_cfg
 from isaaclab.managers import TerminationTermCfg, DatasetExportMode
 
 import cyclo_lab
-import sys
-import sys, os
+import os
 
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from recorder_manager.recorder_manager import StreamingRecorderManager
 
 class RateLimiter:
@@ -137,10 +134,10 @@ def main():
 
     # create controller
     if args_cli.robot_type == "OMY":
-        from dds_sdk.omy_sdk import OMYSdk
+        from cyclo_lab.sim2real.teleop.omy_sdk import OMYSdk
         teleop_interface = OMYSdk(env, mode='record')
     elif args_cli.robot_type == "FFW_SG2":
-        from dds_sdk.ffw_sg2_sdk import FFWSG2Sdk
+        from cyclo_lab.sim2real.teleop.ffw_sg2_sdk import FFWSG2Sdk
         teleop_interface = FFWSG2Sdk(env, mode='record')
     else:
         raise ValueError(

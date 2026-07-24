@@ -19,13 +19,11 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
-import isaaclab.sim as sim_utils
 from isaaclab.managers import EventTermCfg as EventTerm
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.sensors import FrameTransformerCfg
 from isaaclab.sensors.frame_transformer.frame_transformer_cfg import OffsetCfg
 from isaaclab.utils import configclass
-from isaaclab.sensors import CameraCfg
 
 from cyclo_lab.real_world_tasks.manager_based.FFW_SG2.pick_place.mdp import ffw_sg2_pick_place_events
 from cyclo_lab.real_world_tasks.manager_based.FFW_SG2.pick_place.pick_place_env_cfg import PickPlaceEnvCfg
@@ -44,6 +42,7 @@ from cyclo_lab.assets.object.scissors_ring import SCISSORS_RING_CFG
 from cyclo_lab.assets.object.screw_driver_ring import SCREW_DRIVER_RING_CFG
 from cyclo_lab.assets.object.tooth_brush import TOOTH_BRUSH_CFG
 from cyclo_lab.assets.object.background_cube import BACKGROUND_CUBE_CFG
+from cyclo_lab.assets.sensors.ffw_sg2_cameras import make_ffw_sg2_head_camera_cfg
 
 
 @configclass
@@ -178,20 +177,11 @@ class FFWSG2PickPlaceEnvCfg(PickPlaceEnvCfg):
         self.scene.background_cube = BACKGROUND_CUBE_CFG.replace(prim_path="{ENV_REGEX_NS}/BackgroundCube")
         self.scene.plane.semantic_tags = [("class", "ground")]
 
-        self.scene.cam_head = CameraCfg(
-            prim_path="{ENV_REGEX_NS}/Robot/ffw_sg2_follower/head_link2/zed/cam_head",
+        self.scene.cam_head = make_ffw_sg2_head_camera_cfg(
             update_period=0.0,
             height=376,
             width=672,
-            data_types=["rgb"],
-            spawn=sim_utils.PinholeCameraCfg(
-                focal_length=10.4, focus_distance=200.0, horizontal_aperture=20.955, clipping_range=(0.01, 100.0)
-            ),
-            offset=CameraCfg.OffsetCfg(
-                pos=(0.0, 0.03, 0.0),
-                rot=(0.5, 0.5, -0.5, -0.5),
-                convention="isaac",
-            )
+            clipping_range=(0.01, 100.0),
         )
 
         # Listens to the required transforms

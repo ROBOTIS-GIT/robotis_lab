@@ -12,8 +12,8 @@
 # Exits if error occurs
 set -e
 
-# Set tab-spaces
-tabs 4
+# Set tab-spaces when the terminal supports it.
+tabs 4 2>/dev/null || true
 
 # get source directory
 export CYCLOLAB_PATH="$( cd "$( dirname "${BASH_SOURCE[0]}" )/.." &> /dev/null && pwd )"

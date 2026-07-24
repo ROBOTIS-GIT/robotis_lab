@@ -62,8 +62,8 @@ Docker installation provides a consistent environment with all dependencies pre-
 **What's included in the Docker image:**
 - Isaac Sim 5.1.0
 - Isaac Lab v2.3.0 (from third_party submodule)
-- CycloneDDS 0.10.2 (from third_party submodule)
-- robotis_dds_python (from third_party submodule)
+- zenoh_ros2_sdk (from third_party submodule)
+- eclipse-zenoh 1.6.x for ROS2-compatible Zenoh topics
 - LeRobot 0.3.3 (in separate virtual environment at `~/lerobot_env`)
 - All required dependencies and configurations
 
@@ -216,7 +216,7 @@ https://github.com/user-attachments/assets/67267195-db02-4dd9-83cf-00830b4bc13f
 Launch the AI Worker SH5 runtime
 
 ```bash
-# Uses ROS_DOMAIN_ID from the environment.
+# Uses ROS_DOMAIN_ID and Zenoh settings from the environment.
 python scripts/sim2real/runtime/sh5_runtime.py --enable_camera_views
 
 # NVIDIA Simple Warehouse environment
@@ -226,7 +226,8 @@ python scripts/sim2real/runtime/sh5_runtime.py --enable_camera_views --enable_en
 Launch the FFW SG2 runtime
 
 ```bash
-# Uses ROS_DOMAIN_ID from the environment and publishes the SG2 head observation camera topic.
+# Uses ROS_DOMAIN_ID and Zenoh settings from the environment.
+# Publishes the SG2 head and wrist observation camera topics.
 python scripts/sim2real/runtime/sg2_runtime.py --enable_camera
 
 # Robotis showroom environment: source/cyclo_lab/data/environments/robotis_showroom/robotis_showroom_scene.usda

@@ -82,15 +82,15 @@ class FFWSG2PickPlaceMimicEnv(ManagerBasedRLMimicEnv):
                 lift_action = joint_pos_target[18:19]
                 head_action = joint_pos_target[16:18]
 
-            # Concatenate full 20D action:
+            # Concatenate full 19D action:
             # [left_eef(7), gripper_l(1), right_eef(7), gripper_r(1), lift(1), head(2)]
             action = torch.cat([
                 left_pose_action,     # 1-7: left arm (keep current)
                 left_gripper_action,  # 8: left gripper (keep current)
                 right_pose_action,      # 9-15: right arm (Mimic controlled)
                 right_gripper_action,      # 16: right gripper (keep current)
-                head_action,           # 17-18: head (keep current)
-                lift_action            # 19: lift (keep current)
+                lift_action,           # 17: lift (keep current)
+                head_action            # 18-19: head (keep current)
             ], dim=0)
 
             result = action.unsqueeze(0)
@@ -124,7 +124,7 @@ class FFWSG2PickPlaceMimicEnv(ManagerBasedRLMimicEnv):
                 lift_action = joint_pos_target[18:19]
                 head_action = joint_pos_target[16:18]
 
-            # Concatenate full 20D action:
+            # Concatenate full 19D action:
             # [left_eef(7), gripper_l(1), right_eef(7), gripper_r(1), lift(1), head(2)]
             action = torch.cat([
                 left_pose_action,     # 1-7: left arm (Mimic controlled)
