@@ -26,8 +26,18 @@ def parse_args():
     )
     parser.add_argument("--enable_camera", action="store_true", help="Enable SG2 observation camera publishing.")
     parser.add_argument("--camera_publish_hz", type=float, default=15.0, help="Compressed image publish rate in Hz.")
-    parser.add_argument("--enable_environment", action="store_true", help="Spawn the Robotis showroom USD.")
-    parser.add_argument("--environment_usd", default=None, help="Environment USD path. Defaults to the Robotis showroom.")
+    parser.add_argument("--enable_environment", action="store_true", help="Spawn the selected environment USD.")
+    parser.add_argument(
+        "--environment",
+        choices=("robotis_showroom", "galileo_locomanip"),
+        default="robotis_showroom",
+        help="Environment preset to spawn. Defaults to robotis_showroom.",
+    )
+    parser.add_argument(
+        "--environment_usd",
+        default=None,
+        help="Override the selected environment preset's USD path or URL.",
+    )
     parser.add_argument("--base_frame", default="base_link", help="ROS base frame name for joint_states, odometry, and TF.")
     parser.add_argument("--base_body", default="world", help="SG2 USD body name to use for the base pose in Isaac Sim.")
     parser.add_argument("--max_runtime", type=float, default=0.0, help="Stop after this many seconds. 0 means run until closed.")

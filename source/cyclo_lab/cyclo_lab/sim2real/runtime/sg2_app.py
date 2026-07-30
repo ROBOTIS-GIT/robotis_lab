@@ -13,6 +13,10 @@ from isaaclab.scene import InteractiveScene, InteractiveSceneCfg
 from isaaclab.sensors import CameraCfg
 from isaaclab.utils import configclass
 
+from cyclo_lab.assets.environments.galileo_locomanip import (
+    GALILEO_LOCOMANIP_ENVIRONMENT_USD_PATH,
+    make_galileo_locomanip_environment_cfg,
+)
 from cyclo_lab.assets.environments.robotis_showroom import (
     ROBOTIS_SHOWROOM_USD_PATH,
     make_robotis_showroom_environment_cfg,
@@ -63,6 +67,10 @@ from cyclo_lab.sim2real.specs.ffw_sg2 import (
 from cyclo_lab.sim2real.transport.ros2_zenoh import best_effort_qos, ros_domain_id
 
 
+_GALILEO_LOCOMANIP_SG2_POS = (0.0, 0.18, 0.0)
+_GALILEO_LOCOMANIP_SG2_ROT = (1.0, 0.0, 0.0, 0.0)
+
+
 @configclass
 class SG2BringupSceneCfg(InteractiveSceneCfg):
     ground = AssetBaseCfg(prim_path="/World/defaultGroundPlane", spawn=sim_utils.GroundPlaneCfg())
@@ -77,11 +85,14 @@ class SG2BringupSceneCfg(InteractiveSceneCfg):
     cam_wrist_right: CameraCfg = None
 
 
-def _make_robot_cfg() -> ArticulationCfg:
+def _make_robot_cfg(
+    robot_pos: tuple[float, float, float] = FFW_SG2_ROBOT_POS,
+    robot_rot: tuple[float, float, float, float] = FFW_SG2_ROBOT_ROT,
+) -> ArticulationCfg:
     robot_cfg = deepcopy(FFW_SG2_PHYSICS_CFG)
     robot_cfg.spawn.rigid_props.disable_gravity = False
-    robot_cfg.init_state.pos = FFW_SG2_ROBOT_POS
-    robot_cfg.init_state.rot = FFW_SG2_ROBOT_ROT
+    robot_cfg.init_state.pos = robot_pos
+    robot_cfg.init_state.rot = robot_rot
     robot_cfg.init_state.joint_pos.update(FFW_SG2_INITIAL_JOINT_POSITIONS)
     base_drive_actuator = robot_cfg.actuators.get("base_drive")
     if base_drive_actuator is not None:
@@ -234,15 +245,30 @@ def main(args_cli, simulation_app):
     sim.set_camera_view(FFW_SG2_OVERVIEW_CAMERA_EYE, FFW_SG2_OVERVIEW_CAMERA_TARGET)
 
     scene_cfg = SG2BringupSceneCfg(num_envs=1, env_spacing=2.0)
-    environment_usd_path = args_cli.environment_usd or ROBOTIS_SHOWROOM_USD_PATH
-    scene_cfg.robot = _make_robot_cfg().replace(prim_path="{ENV_REGEX_NS}/Robot")
+    environment_defaults = {
+        "robotis_showroom": ROBOTIS_SHOWROOM_USD_PATH,
+        "galileo_locomanip": GALILEO_LOCOMANIP_ENVIRONMENT_USD_PATH,
+    }
+    environment_usd_path = args_cli.environment_usd or environment_defaults[args_cli.environment]
+    if args_cli.enable_environment and args_cli.environment == "galileo_locomanip":
+        robot_pos = _GALILEO_LOCOMANIP_SG2_POS
+        robot_rot = _GALILEO_LOCOMANIP_SG2_ROT
+    else:
+        robot_pos = FFW_SG2_ROBOT_POS
+        robot_rot = FFW_SG2_ROBOT_ROT
+    scene_cfg.robot = _make_robot_cfg(robot_pos, robot_rot).replace(prim_path="{ENV_REGEX_NS}/Robot")
     if args_cli.enable_environment:
         if "://" not in environment_usd_path and not os.path.exists(environment_usd_path):
             raise FileNotFoundError(f"Environment USD not found: {environment_usd_path}")
-        scene_cfg.ground.init_state.pos = (0.0, 0.0, FFW_SG2_ENVIRONMENT_GROUND_Z)
-        scene_cfg.ground.spawn.visible = True
-        scene_cfg.ground.spawn.color = None
-        scene_cfg.environment = make_robotis_showroom_environment_cfg(environment_usd_path)
+        if args_cli.environment == "galileo_locomanip":
+            # Galileo supplies its own collision floor at world z=0.
+            scene_cfg.ground = None
+            scene_cfg.environment = make_galileo_locomanip_environment_cfg(environment_usd_path)
+        else:
+            scene_cfg.ground.init_state.pos = (0.0, 0.0, FFW_SG2_ENVIRONMENT_GROUND_Z)
+            scene_cfg.ground.spawn.visible = True
+            scene_cfg.ground.spawn.color = None
+            scene_cfg.environment = make_robotis_showroom_environment_cfg(environment_usd_path)
     if camera_enabled:
         image_update_period = camera_publish_period(args_cli.camera_publish_hz)
         scene_cfg.cam_head = make_ffw_sg2_head_camera_cfg(update_period=image_update_period)
@@ -293,7 +319,7 @@ def main(args_cli, simulation_app):
     print(f"[INFO] FFW SG2 Zenoh ROS2 runtime ready. ROS_DOMAIN_ID={domain_id}")
     print(f"[INFO] SG2 USD: {usd_path}")
     if args_cli.enable_environment:
-        print(f"[INFO] Environment: {environment_usd_path}")
+        print(f"[INFO] Environment: {args_cli.environment} ({environment_usd_path})")
     print("[Zenoh ROS2] JointTrajectory subscriber reliability: best_effort")
     print(f"[Zenoh ROS2] Publishing joint states: {sg2_cfg.JOINT_STATES_TOPIC}")
     if _mobile_base_enabled(args_cli):

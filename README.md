@@ -232,6 +232,12 @@ python scripts/sim2real/runtime/sg2_runtime.py --enable_camera
 
 # Robotis showroom environment: source/cyclo_lab/data/environments/robotis_showroom/robotis_showroom_scene.usda
 python scripts/sim2real/runtime/sg2_runtime.py --enable_camera --enable_environment
+
+# IsaacLab-Arena Galileo warehouse scene (streams the USD and its dependencies from NVIDIA on first launch)
+python scripts/sim2real/runtime/sg2_runtime.py \
+  --enable_camera \
+  --enable_environment \
+  --environment galileo_locomanip
 ```
 
 </details>
