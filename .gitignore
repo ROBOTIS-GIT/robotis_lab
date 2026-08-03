@@ -66,6 +66,8 @@ datasets
 
 # Tests
 tests/
+!source/cyclo_arena/tests/
+!source/cyclo_arena/tests/**
 
 # Docker history
 .isaac-lab-docker-history
@@ -74,8 +76,12 @@ tests/
 # local folders under third_party, but keep submodule roots visible to Git.
 third_party/*
 !third_party/IsaacLab
+!third_party/IsaacLab-Arena
 !third_party/ai_sapiens
 !third_party/zenoh_ros2_sdk
 
 # Zenoh ROS2 SDK message cache mounted into Docker
 docker/zenoh_cache/
+
+# Local model workspace mounted into Cyclo Lab and model-server containers
+docker/workspace/model/

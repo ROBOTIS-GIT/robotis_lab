@@ -1,7 +1,7 @@
 # cyclo_lab
 
 [![IsaacSim](https://img.shields.io/badge/IsaacSim-5.1.0-silver.svg)](https://docs.isaacsim.omniverse.nvidia.com/latest/index.html)
-[![Isaac Lab](https://img.shields.io/badge/IsaacLab-2.3.0-silver)](https://isaac-sim.github.io/IsaacLab/main/index.html)
+[![Isaac Lab](https://img.shields.io/badge/IsaacLab-2.3.2-silver)](https://isaac-sim.github.io/IsaacLab/main/index.html)
 [![Python](https://img.shields.io/badge/python-3.11-blue.svg)](https://docs.python.org/3/whatsnew/3.11.html)
 [![Linux platform](https://img.shields.io/badge/platform-linux--64-orange.svg)](https://releases.ubuntu.com/22.04/)
 [![License](https://img.shields.io/badge/license-Apache2.0-yellow.svg)](https://opensource.org/license/apache-2-0)
@@ -28,17 +28,21 @@ Docker installation provides a consistent environment with all dependencies pre-
 
 **Steps:**
 
-1. Clone cyclo_lab repository with submodules:
+1. Clone cyclo_lab and initialize its direct submodules:
 
    ```bash
-   git clone --recurse-submodules https://github.com/ROBOTIS-GIT/cyclo_lab.git
+   git clone https://github.com/ROBOTIS-GIT/cyclo_lab.git
    cd cyclo_lab
+   git submodule update --init
    ```
 
    If you already cloned without submodules, initialize them:
    ```bash
-   git submodule update --init --recursive
+   git submodule update --init
    ```
+
+   Arena's nested Isaac Lab checkout is intentionally not initialized. Cyclo Lab uses its own
+   pinned Isaac Lab 2.3.2 checkout as the shared simulation runtime.
 
 2. Build and start the Docker container:
 
@@ -54,6 +58,7 @@ Docker installation provides a consistent environment with all dependencies pre-
 
 **Docker Commands:**
 - `./docker/container.sh start` - Build and start the container
+- `./docker/container.sh recreate` - Recreate the container after rebuilding its image
 - `./docker/container.sh enter` - Enter the running container
 - `./docker/container.sh stop` - Stop the container
 - `./docker/container.sh logs` - View container logs
@@ -61,11 +66,63 @@ Docker installation provides a consistent environment with all dependencies pre-
 
 **What's included in the Docker image:**
 - Isaac Sim 5.1.0
-- Isaac Lab v2.3.0 (from third_party submodule)
+- Isaac Lab v2.3.2 (from third_party submodule)
+- Isaac Lab Arena v0.2 compatibility branch (from third_party submodule)
+- Cyclo Arena as a separate package at `source/cyclo_arena`
 - zenoh_ros2_sdk (from third_party submodule)
 - eclipse-zenoh 1.6.x for ROS2-compatible Zenoh topics
 - LeRobot 0.3.3 (in separate virtual environment at `~/lerobot_env`)
 - All required dependencies and configurations
+
+Verify the Arena integration inside the Cyclo Lab container:
+
+```bash
+cyclo-arena doctor --strict
+```
+
+See [Arena integration](docs/arena_integration.md) for the compatibility contract and FFW-SG2 roadmap.
+
+Select the robot, scene, checkpoint, and initial pose in
+`source/cyclo_arena/configs/run.yaml`, prepare GR00T on the host, and run inside Cyclo Lab:
+
+```bash
+./scripts/arena/run.sh --list-robots
+./scripts/arena/run.sh --list-scenes
+./scripts/arena/run.sh --list-models
+./docker/container.sh start-groot
+./docker/container.sh enter
+./scripts/arena/run.sh
+```
+
+The launcher composes one generic Arena environment from the selected components; scene-specific
+environment aliases and model-specific Python catalog entries are not required.
+Store Cyclo Arena checkpoints under `docker/workspace/model`; the container exposes the same
+workspace at `/workspace/model`. `start-groot` detects N1.6 or N1.7 from checkpoint metadata,
+builds the matching isolated model server, and prepares it before the container-side simulation
+connects to it.
+
+Use `cyclo-arena list workflows` to see the upstream policy evaluation, batch evaluation,
+teleoperation, demonstration, remote-server, RL-training, and test entry points. Passthrough
+commands preserve Arena's native arguments, for example `cyclo-arena policy --help`.
+
+To update the Zenoh ROS2 SDK to a newer stable tag, run the following on the host and replace
+`v0.1.8` with the desired release:
+
+```bash
+git submodule update --init third_party/zenoh_ros2_sdk
+git -C third_party/zenoh_ros2_sdk fetch origin --tags
+git -C third_party/zenoh_ros2_sdk checkout v0.1.8
+git add third_party/zenoh_ros2_sdk
+
+./docker/container.sh build
+./docker/container.sh recreate
+docker exec cyclo_lab bash -lc \
+  'cd /workspace/cyclo_lab && cyclo-arena doctor --strict'
+```
+
+When changing the pinned release, update `EXPECTED_ZENOH_SDK_COMMIT` and
+`EXPECTED_ZENOH_SDK_VERSION` in `source/cyclo_arena/cyclo_arena/doctor.py` in the same commit. The
+current pin is Zenoh ROS2 SDK `v0.1.8`; `ai_sapiens` is not part of this integration.
 
 ## Try examples
 

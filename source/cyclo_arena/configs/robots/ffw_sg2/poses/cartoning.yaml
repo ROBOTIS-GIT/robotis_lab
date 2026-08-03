@@ -1,0 +1,23 @@
+name: cartoning
+robot: ffw_sg2
+
+joint_positions:
+  arm_l_joint1: 0.73638266
+  arm_l_joint2: 0.22049776
+  arm_l_joint3: 0.07668705
+  arm_l_joint4: -2.1807334
+  arm_l_joint5: 0.24693495
+  arm_l_joint6: -0.025238778
+  arm_l_joint7: 0.060473718
+  gripper_l_joint1: 0.1196505
+  arm_r_joint1: 0.8178035
+  arm_r_joint2: -0.14255236
+  arm_r_joint3: -0.07800532
+  arm_r_joint4: -2.1858866
+  arm_r_joint5: -0.18604311
+  arm_r_joint6: -0.14178537
+  arm_r_joint7: 0.07825281
+  gripper_r_joint1: 0.1672039
+  lift_joint: -0.2
+  head_joint1: 0.5
+  head_joint2: 0.0
