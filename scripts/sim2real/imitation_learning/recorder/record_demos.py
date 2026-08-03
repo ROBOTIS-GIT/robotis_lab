@@ -60,11 +60,20 @@ parser.add_argument(
     action="store_true",
     help="Publish compressed camera topics while recording. HDF5 camera recording does not require this.",
 )
-parser.add_argument(
+extra_state_topic_group = parser.add_mutually_exclusive_group()
+extra_state_topic_group.add_argument(
     "--publish_extra_state_topics",
+    dest="publish_extra_state_topics",
     action="store_true",
-    help="Publish odom/tf in addition to /joint_states while recording.",
+    help="Publish odom/tf in addition to /joint_states while recording. Enabled by default.",
 )
+extra_state_topic_group.add_argument(
+    "--no_publish_extra_state_topics",
+    dest="publish_extra_state_topics",
+    action="store_false",
+    help="Disable odom/tf publishing while recording. /joint_states is always published.",
+)
+parser.set_defaults(publish_extra_state_topics=True)
 parser.add_argument("--profile", action="store_true", help="Print timing statistics for the recording loop.")
 parser.add_argument("--profile_interval", type=int, default=120, help="Loop iterations between profile reports.")
 parser.add_argument(
