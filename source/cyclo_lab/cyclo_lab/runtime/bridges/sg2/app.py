@@ -439,7 +439,8 @@ def main(args_cli, simulation_app):
         for camera_name, camera_topic in FFW_SG2_CAMERA_TOPICS.items():
             print(f"[Zenoh ROS2] Publishing camera {camera_name}: {camera_topic}")
 
-    reset_handler = ResetRequestHandler(enable_gui=not getattr(args_cli, "headless", False), enable_stdin=True)
+    is_headless = bool(getattr(args_cli, "headless", False))
+    reset_handler = ResetRequestHandler(enable_gui=not is_headless, enable_stdin=is_headless)
     try:
         run_simulator(simulation_app, args_cli, sim, scene, bridge, reset_handler)
     finally:

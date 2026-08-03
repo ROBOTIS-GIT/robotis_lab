@@ -331,25 +331,6 @@ python scripts/sim2real/imitation_learning/recorder/record_demos.py --task=Cyclo
 
 ```
 
-* Teleop and record demos in Robotis showroom
-```bash
-$ISAACLAB_PATH/isaaclab.sh -p scripts/sim2real/imitation_learning/recorder/record_demos.py --task=Cyclo-Real-Showroom-FFW-SG2-v0 --robot_type FFW_SG2 --dataset_file ./datasets/ffw_sg2_showroom_raw.hdf5 --num_demos 2 --headless --enable_cameras
-```
-
-* Data convert Robotis showroom dataset to LeRobot
-```bash
-source /root/lerobot_env/bin/activate
-python scripts/sim2real/imitation_learning/data_converter/isaaclab2lerobot.py \
-    --task Cyclo-Real-Showroom-FFW-SG2-v0 \
-    --robot_type FFW_SG2_SHOWROOM \
-    --dataset_file ./datasets/ffw_sg2_showroom_raw.hdf5 \
-    --frame_skip 0 \
-    --frame_stride 1 \
-    --resample_by_time \
-    --repo_id cyclo_lab/ffw_sg2_showroom \
-    --root ./datasets/lerobot/ffw_sg2_showroom
-```
-
 * Mimic generate dataset
 ```bash
 
@@ -380,6 +361,27 @@ lerobot-python scripts/sim2real/imitation_learning/data_converter/isaaclab2lerob
 ```bash
 python scripts/sim2real/imitation_learning/inference/inference_demos.py --task Cyclo-Real-Pick-Place-FFW-SG2-v0  --robot_type FFW_SG2 --enable_cameras
 
+```
+
+**FFW SG2 Showroom Task**
+
+* Teleop and record demos in Robotis showroom
+```bash
+python scripts/sim2real/imitation_learning/recorder/record_demos.py --task=Cyclo-Real-Showroom-FFW-SG2-v0 --robot_type FFW_SG2 --dataset_file ./datasets/ffw_sg2_showroom_raw.hdf5 --num_demos 2 --headless --enable_cameras
+```
+
+* Data convert Robotis showroom dataset to LeRobot
+```bash
+source /root/lerobot_env/bin/activate
+python scripts/sim2real/imitation_learning/data_converter/isaaclab2lerobot.py \
+    --task Cyclo-Real-Showroom-FFW-SG2-v0 \
+    --robot_type FFW_SG2_SHOWROOM \
+    --dataset_file ./datasets/ffw_sg2_showroom_raw.hdf5 \
+    --frame_skip 0 \
+    --frame_stride 1 \
+    --resample_by_time \
+    --repo_id cyclo_lab/ffw_sg2_showroom \
+    --root ./datasets/lerobot/ffw_sg2_showroom
 ```
 
 ## License

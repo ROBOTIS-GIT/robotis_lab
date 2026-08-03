@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import atexit
 import select
 import sys
 import termios
@@ -25,6 +26,7 @@ class ResetRequestHandler:
         self._stdin_stop_event = threading.Event()
         self._stdin_fd = None
         self._stdin_attrs = None
+        self._closed = False
 
         if enable_gui:
             self._try_enable_gui_keyboard()
@@ -66,6 +68,7 @@ class ResetRequestHandler:
             self._stdin_thread = threading.Thread(target=self._read_stdin_loop, daemon=True)
             self._stdin_thread.start()
             self.stdin_enabled = True
+            atexit.register(self.close)
         except Exception as exc:
             self._restore_stdin()
             print(f"[WARN] Terminal reset shortcut unavailable: {exc}")
@@ -102,15 +105,18 @@ class ResetRequestHandler:
         return reset_requested
 
     def close(self):
+        if self._closed:
+            return
+        self._closed = True
         self._stdin_stop_event.set()
+        self._restore_stdin()
         if self._stdin_thread is not None:
             self._stdin_thread.join(timeout=0.5)
-        self._restore_stdin()
         if self._input is not None and self._keyboard is not None and self._keyboard_sub is not None:
             self._input.unsubscribe_to_keyboard_events(self._keyboard, self._keyboard_sub)
             self._keyboard_sub = None
 
     def _restore_stdin(self):
         if self._stdin_fd is not None and self._stdin_attrs is not None:
-            termios.tcsetattr(self._stdin_fd, termios.TCSADRAIN, self._stdin_attrs)
+            termios.tcsetattr(self._stdin_fd, termios.TCSANOW, self._stdin_attrs)
             self._stdin_attrs = None
