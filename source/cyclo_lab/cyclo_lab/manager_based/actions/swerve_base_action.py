@@ -167,7 +167,7 @@ class SwerveBaseVelocityAction(ActionTerm):
             self._modules,
             self.cfg.wheel_radius,
             config=SwerveControllerConfig(
-                enabled_speed_limits=True,
+                enabled_speed_limits=self.cfg.enabled_speed_limits,
                 linear_x_limiter=SpeedLimiter(
                     has_acceleration_limits=True,
                     max_acceleration=self.cfg.linear_acceleration_limit * self.cfg.drive_speed_scale,
@@ -181,6 +181,10 @@ class SwerveBaseVelocityAction(ActionTerm):
                     max_acceleration=self.cfg.angular_acceleration_limit * self.cfg.drive_speed_scale,
                 ),
                 steering_angular_velocity_limit=self.cfg.steering_angular_velocity_limit,
+                steering_alignment_angle_error_threshold=self.cfg.steering_alignment_angle_error_threshold,
+                steering_alignment_start_angle_error_threshold=self.cfg.steering_alignment_start_angle_error_threshold,
+                steering_alignment_start_speed_error_threshold=self.cfg.steering_alignment_start_speed_error_threshold,
+                enabled_wheel_saturation_scaling=self.cfg.enabled_wheel_saturation_scaling,
             ),
         )
 
@@ -202,6 +206,11 @@ class SwerveBaseVelocityActionCfg(ActionTermCfg):
     wheel_speed_limit_lower: float = -50.0
     wheel_speed_limit_upper: float = 50.0
     steering_angular_velocity_limit: float = 4.0
+    enabled_speed_limits: bool = True
     linear_acceleration_limit: float = 0.6
     angular_acceleration_limit: float = 1.2
+    steering_alignment_angle_error_threshold: float = 0.2
+    steering_alignment_start_angle_error_threshold: float = 0.2
+    steering_alignment_start_speed_error_threshold: float = 0.1
+    enabled_wheel_saturation_scaling: bool = False
     drive_speed_scale: float = 1.0

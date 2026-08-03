@@ -18,7 +18,7 @@ import re
 from copy import deepcopy
 
 from isaacsim.core.utils.stage import get_current_stage
-from pxr import Sdf, Usd, UsdPhysics
+from pxr import Gf, Sdf, Usd, UsdPhysics
 
 from isaaclab.actuators import ImplicitActuatorCfg
 from isaaclab.assets.articulation import ArticulationCfg
@@ -36,6 +36,9 @@ from cyclo_lab.robot_specs.ffw.sg2.mobile_base import (
     SG2_SWERVE_DRIVE_DAMPING as _SG2_SWERVE_DRIVE_DAMPING,
     SG2_SWERVE_STEERING_JOINTS as _SG2_SWERVE_STEERING_JOINTS,
     SG2_SWERVE_WHEEL_JOINTS as _SG2_SWERVE_WHEEL_JOINTS,
+)
+from cyclo_lab.robot_specs.ffw.sg2.control import (
+    FFW_SG2_SWERVE_STEERING_ANGULAR_VELOCITY_LIMIT as _SG2_SWERVE_STEERING_ANGULAR_VELOCITY_LIMIT,
 )
 
 
@@ -61,6 +64,7 @@ _SG2_WHEEL_DRIVE_LINKS = ("left_wheel_drive_link", "right_wheel_drive_link", "re
 _SG2_PHYSICS_LIFT_EFFORT_LIMIT = 5_000_000.0
 _SG2_PHYSICS_LIFT_STIFFNESS = 250_000.0
 _SG2_PHYSICS_LIFT_DAMPING = 5_000.0
+_SG2_BASE_CENTER_OF_MASS = (-0.07330104, 0.004389754, 0.05)
 
 
 def _iter_robot_prims(stage, prim_path: str):
@@ -115,6 +119,24 @@ def _apply_sg2_world_articulation_root(stage, prim_path: str) -> None:
     base_prim = stage.GetPrimAtPath(base_path)
     if base_prim.IsValid():
         UsdPhysics.ArticulationRootAPI.Apply(base_prim)
+
+
+def _lower_sg2_base_center_of_mass(stage, prim_path: str) -> None:
+    base_path = Sdf.Path(f"{prim_path}/ffw_sg2_follower/{_SG2_BASE_LINK_NAME}")
+    base_prim = stage.GetPrimAtPath(base_path)
+    if not base_prim.IsValid():
+        return
+
+    if base_prim.HasAPI(UsdPhysics.MassAPI):
+        mass_api = UsdPhysics.MassAPI(base_prim)
+    else:
+        mass_api = UsdPhysics.MassAPI.Apply(base_prim)
+
+    center_of_mass_attr = mass_api.GetCenterOfMassAttr()
+    if not center_of_mass_attr.IsValid():
+        center_of_mass_attr = mass_api.CreateCenterOfMassAttr()
+    center_of_mass_attr.Set(Gf.Vec3f(*_SG2_BASE_CENTER_OF_MASS))
+    print(f"[SG2 base physics] lowered base center of mass to {_SG2_BASE_CENTER_OF_MASS}.")
 
 
 def _filter_sg2_base_wheel_collisions(stage, prim_path: str) -> None:
@@ -179,6 +201,7 @@ def spawn_sg2_with_base_physics(prim_path, cfg, translation=None, orientation=No
     make_uninstanceable(prim_path, stage)
     _remove_sg2_world_fixed_joint(stage, prim_path)
     _apply_sg2_world_articulation_root(stage, prim_path)
+    _lower_sg2_base_center_of_mass(stage, prim_path)
 
     material_path = f"{prim_path}/wheelPhysicsMaterial"
     _SG2_WHEEL_PHYSICS_MATERIAL.func(material_path, _SG2_WHEEL_PHYSICS_MATERIAL)
@@ -307,7 +330,7 @@ def _configure_sg2_mobile_base_actuators(robot_cfg: ArticulationCfg) -> None:
     robot_cfg.actuators = {
         "base_steer": ImplicitActuatorCfg(
             joint_names_expr=list(_SG2_SWERVE_STEERING_JOINTS),
-            velocity_limit_sim=10.0,
+            velocity_limit_sim=_SG2_SWERVE_STEERING_ANGULAR_VELOCITY_LIMIT,
             effort_limit_sim=100000.0,
             stiffness=10000.0,
             damping=100.0,

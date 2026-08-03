@@ -19,7 +19,12 @@ from cyclo_lab.robot_specs.ffw.sg2 import (
     FFW_SG2_PUBLISHED_JOINT_NAMES as SG2_PUBLISHED_JOINT_NAMES,
     FFW_SG2_SWERVE_ANGULAR_ACCELERATION_LIMIT as SG2_SWERVE_ANGULAR_ACCELERATION_LIMIT,
     FFW_SG2_SWERVE_DRIVE_SPEED_SCALE as SG2_SWERVE_DRIVE_SPEED_SCALE,
+    FFW_SG2_SWERVE_ENABLED_SPEED_LIMITS as SG2_SWERVE_ENABLED_SPEED_LIMITS,
+    FFW_SG2_SWERVE_ENABLED_WHEEL_SATURATION_SCALING as SG2_SWERVE_ENABLED_WHEEL_SATURATION_SCALING,
     FFW_SG2_SWERVE_LINEAR_ACCELERATION_LIMIT as SG2_SWERVE_LINEAR_ACCELERATION_LIMIT,
+    FFW_SG2_SWERVE_STEERING_ALIGNMENT_ANGLE_ERROR_THRESHOLD as SG2_SWERVE_STEERING_ALIGNMENT_ANGLE_ERROR_THRESHOLD,
+    FFW_SG2_SWERVE_STEERING_ALIGNMENT_START_ANGLE_ERROR_THRESHOLD as SG2_SWERVE_STEERING_ALIGNMENT_START_ANGLE_ERROR_THRESHOLD,
+    FFW_SG2_SWERVE_STEERING_ALIGNMENT_START_SPEED_ERROR_THRESHOLD as SG2_SWERVE_STEERING_ALIGNMENT_START_SPEED_ERROR_THRESHOLD,
     FFW_SG2_SWERVE_STEERING_ANGULAR_VELOCITY_LIMIT as SG2_SWERVE_STEERING_ANGULAR_VELOCITY_LIMIT,
     clamp_lift_position,
 )
@@ -82,7 +87,7 @@ class SG2ZenohRos2Bridge:
                 swerve_modules,
                 wheel_radius,
                 config=SwerveControllerConfig(
-                    enabled_speed_limits=True,
+                    enabled_speed_limits=SG2_SWERVE_ENABLED_SPEED_LIMITS,
                     linear_x_limiter=SpeedLimiter(
                         has_acceleration_limits=True,
                         max_acceleration=SG2_SWERVE_LINEAR_ACCELERATION_LIMIT * SG2_SWERVE_DRIVE_SPEED_SCALE,
@@ -96,6 +101,10 @@ class SG2ZenohRos2Bridge:
                         max_acceleration=SG2_SWERVE_ANGULAR_ACCELERATION_LIMIT * SG2_SWERVE_DRIVE_SPEED_SCALE,
                     ),
                     steering_angular_velocity_limit=SG2_SWERVE_STEERING_ANGULAR_VELOCITY_LIMIT,
+                    steering_alignment_angle_error_threshold=SG2_SWERVE_STEERING_ALIGNMENT_ANGLE_ERROR_THRESHOLD,
+                    steering_alignment_start_angle_error_threshold=SG2_SWERVE_STEERING_ALIGNMENT_START_ANGLE_ERROR_THRESHOLD,
+                    steering_alignment_start_speed_error_threshold=SG2_SWERVE_STEERING_ALIGNMENT_START_SPEED_ERROR_THRESHOLD,
+                    enabled_wheel_saturation_scaling=SG2_SWERVE_ENABLED_WHEEL_SATURATION_SCALING,
                 ),
             )
             if swerve_modules
