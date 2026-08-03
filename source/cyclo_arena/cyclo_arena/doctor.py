@@ -137,7 +137,7 @@ def run_checks(strict: bool = False) -> int:
         else:
             print(f"[OK] CLI {executable}: {executable_path}")
 
-    action_spec, error = _import_module("cyclo_lab.sim2real.specs.ffw_sg2")
+    action_spec, error = _import_module("cyclo_lab.robot_specs.ffw.sg2")
     if error is not None:
         failures.append(f"Cannot import FFW-SG2 action contract: {error}")
     else:

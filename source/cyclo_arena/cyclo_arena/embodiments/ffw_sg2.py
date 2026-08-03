@@ -24,10 +24,9 @@ from cyclo_lab.assets.sensors.ffw_sg2_cameras import (
     make_ffw_sg2_head_camera_cfg,
     make_ffw_sg2_wrist_camera_cfg,
 )
-from cyclo_lab.sim2real.specs.ffw_sg2 import (
+from cyclo_lab.robot_specs.ffw.sg2 import (
     FFW_SG2_ACTION_JOINT_NAMES,
     FFW_SG2_HEAD_JOINT_NAMES,
-    FFW_SG2_INITIAL_JOINT_POSITIONS,
     FFW_SG2_LEFT_ARM_JOINT_NAMES,
     FFW_SG2_LEFT_GRIPPER_JOINT_NAMES,
     FFW_SG2_LIFT_JOINT_NAMES,
@@ -51,7 +50,6 @@ from isaaclab_arena.utils.pose import Pose
 def _make_robot_cfg() -> ArticulationCfg:
     robot_cfg = deepcopy(FFW_SG2_PHYSICS_CFG).replace(prim_path="{ENV_REGEX_NS}/Robot")
     robot_cfg.spawn.rigid_props.disable_gravity = False
-    robot_cfg.init_state.joint_pos.update(FFW_SG2_INITIAL_JOINT_POSITIONS)
     return robot_cfg
 
 
