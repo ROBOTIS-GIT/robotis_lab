@@ -32,7 +32,7 @@ def main():
     app_launcher = AppLauncher(args_cli)
     simulation_app = app_launcher.app
 
-    from cyclo_lab.sim2real.runtime.sh5_app import main as run_sh5_runtime
+    from cyclo_lab.runtime.bridges.sh5.app import main as run_sh5_runtime
 
     try:
         run_sh5_runtime(args_cli, simulation_app)

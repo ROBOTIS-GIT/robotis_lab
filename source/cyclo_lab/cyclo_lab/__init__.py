@@ -15,8 +15,7 @@ def _is_optional_isaac_module(module_name: str | None) -> bool:
 
 # Register Gym environments.
 try:
-    from .simulation_tasks import *
-    from .real_world_tasks import *
+    from .manager_based import *
 except ModuleNotFoundError as exc:
     if not _is_optional_isaac_module(exc.name):
         raise

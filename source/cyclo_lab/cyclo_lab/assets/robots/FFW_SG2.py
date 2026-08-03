@@ -32,6 +32,11 @@ from isaaclab.sim.spawners.from_files import from_files
 from isaaclab.sim.utils import bind_physics_material, clone, make_uninstanceable
 
 from cyclo_lab.assets.robots import CYCLO_LAB_ASSETS_DATA_DIR
+from cyclo_lab.robot_specs.ffw.sg2.mobile_base import (
+    SG2_SWERVE_DRIVE_DAMPING as _SG2_SWERVE_DRIVE_DAMPING,
+    SG2_SWERVE_STEERING_JOINTS as _SG2_SWERVE_STEERING_JOINTS,
+    SG2_SWERVE_WHEEL_JOINTS as _SG2_SWERVE_WHEEL_JOINTS,
+)
 
 
 _SG2_WHEEL_PHYSICS_MATERIAL = RigidBodyMaterialCfg(
@@ -53,16 +58,9 @@ _SG2_WHEEL_LINKS = (
 )
 _SG2_WHEEL_DRIVE_LINKS = ("left_wheel_drive_link", "right_wheel_drive_link", "rear_wheel_drive_link")
 
-SG2_SWERVE_STEERING_JOINTS = ("left_wheel_steer", "right_wheel_steer", "rear_wheel_steer")
-SG2_SWERVE_WHEEL_JOINTS = ("left_wheel_drive", "right_wheel_drive", "rear_wheel_drive")
-SG2_SWERVE_MODULE_X_OFFSETS = (0.1371, 0.1371, -0.2899)
-SG2_SWERVE_MODULE_Y_OFFSETS = (0.2554, -0.2554, 0.0)
-SG2_SWERVE_MODULE_ANGLE_OFFSETS = (0.0, 0.0, 0.0)
-SG2_SWERVE_WHEEL_RADIUS = 0.0865
-SG2_SWERVE_DRIVE_DAMPING = 40.0
-SG2_BRINGUP_LIFT_EFFORT_LIMIT = 5_000_000.0
-SG2_BRINGUP_LIFT_STIFFNESS = 250_000.0
-SG2_BRINGUP_LIFT_DAMPING = 5_000.0
+_SG2_PHYSICS_LIFT_EFFORT_LIMIT = 5_000_000.0
+_SG2_PHYSICS_LIFT_STIFFNESS = 250_000.0
+_SG2_PHYSICS_LIFT_DAMPING = 5_000.0
 
 
 def _iter_robot_prims(stage, prim_path: str):
@@ -292,34 +290,34 @@ FFW_SG2_CFG = ArticulationCfg(
 )
 
 
-def _tune_sg2_bringup_lift(robot_cfg: ArticulationCfg) -> None:
+def _configure_sg2_physics_lift(robot_cfg: ArticulationCfg) -> None:
     lift_actuator = robot_cfg.actuators["lift"]
-    lift_actuator.effort_limit_sim = SG2_BRINGUP_LIFT_EFFORT_LIMIT
-    lift_actuator.stiffness = SG2_BRINGUP_LIFT_STIFFNESS
-    lift_actuator.damping = SG2_BRINGUP_LIFT_DAMPING
+    lift_actuator.effort_limit_sim = _SG2_PHYSICS_LIFT_EFFORT_LIMIT
+    lift_actuator.stiffness = _SG2_PHYSICS_LIFT_STIFFNESS
+    lift_actuator.damping = _SG2_PHYSICS_LIFT_DAMPING
 
 
-def _enable_sg2_swerve_actuators(robot_cfg: ArticulationCfg) -> None:
+def _configure_sg2_mobile_base_actuators(robot_cfg: ArticulationCfg) -> None:
     robot_cfg.init_state.joint_pos.update(
-        {steering_joint: 0.0 for steering_joint in SG2_SWERVE_STEERING_JOINTS}
+        {steering_joint: 0.0 for steering_joint in _SG2_SWERVE_STEERING_JOINTS}
     )
     robot_cfg.init_state.joint_pos.update(
-        {wheel_joint: 0.0 for wheel_joint in SG2_SWERVE_WHEEL_JOINTS}
+        {wheel_joint: 0.0 for wheel_joint in _SG2_SWERVE_WHEEL_JOINTS}
     )
     robot_cfg.actuators = {
         "base_steer": ImplicitActuatorCfg(
-            joint_names_expr=list(SG2_SWERVE_STEERING_JOINTS),
+            joint_names_expr=list(_SG2_SWERVE_STEERING_JOINTS),
             velocity_limit_sim=10.0,
             effort_limit_sim=100000.0,
             stiffness=10000.0,
             damping=100.0,
         ),
         "base_drive": ImplicitActuatorCfg(
-            joint_names_expr=list(SG2_SWERVE_WHEEL_JOINTS),
+            joint_names_expr=list(_SG2_SWERVE_WHEEL_JOINTS),
             velocity_limit_sim=50.0,
             effort_limit_sim=100000.0,
             stiffness=0.0,
-            damping=SG2_SWERVE_DRIVE_DAMPING,
+            damping=_SG2_SWERVE_DRIVE_DAMPING,
         ),
         **robot_cfg.actuators,
     }
@@ -330,10 +328,5 @@ FFW_SG2_PHYSICS_CFG.spawn.func = spawn_sg2_with_base_physics
 FFW_SG2_PHYSICS_CFG.spawn.rigid_props.linear_damping = 2.0
 FFW_SG2_PHYSICS_CFG.spawn.rigid_props.angular_damping = 4.0
 FFW_SG2_PHYSICS_CFG.articulation_root_prim_path = "/ffw_sg2_follower/world"
-_tune_sg2_bringup_lift(FFW_SG2_PHYSICS_CFG)
-_enable_sg2_swerve_actuators(FFW_SG2_PHYSICS_CFG)
-
-# Fixed-root config kept for old kinematic integrations.
-FFW_SG2_KINEMATIC_CFG = deepcopy(FFW_SG2_CFG)
-_tune_sg2_bringup_lift(FFW_SG2_KINEMATIC_CFG)
-_enable_sg2_swerve_actuators(FFW_SG2_KINEMATIC_CFG)
+_configure_sg2_physics_lift(FFW_SG2_PHYSICS_CFG)
+_configure_sg2_mobile_base_actuators(FFW_SG2_PHYSICS_CFG)

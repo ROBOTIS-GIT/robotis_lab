@@ -22,10 +22,18 @@
 import h5py
 import numpy as np
 import argparse
+import sys
 from tqdm import tqdm
 from datetime import datetime
+from pathlib import Path
+
+_REPO_ROOT = Path(__file__).resolve().parents[4]
+_CYCLO_LAB_SOURCE = _REPO_ROOT / "source" / "cyclo_lab"
+if _CYCLO_LAB_SOURCE.is_dir():
+    sys.path.insert(0, str(_CYCLO_LAB_SOURCE))
 
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
+from cyclo_lab.robot_specs.ffw.sg2 import FFW_SG2_ACTION_JOINT_NAMES, FFW_SG2_PUBLISHED_JOINT_NAMES
 
 ROBOT_CONFIGS = {
     "OMY": {
@@ -41,48 +49,66 @@ ROBOT_CONFIGS = {
     },
     "FFW_SG2": {
         "expected_dim": 19,
-        "joint_names": [
-            "arm_l_joint1", "arm_l_joint2", "arm_l_joint3", "arm_l_joint4",
-            "arm_l_joint5", "arm_l_joint6", "arm_l_joint7", "gripper_l_joint1",
-            "arm_r_joint1", "arm_r_joint2", "arm_r_joint3", "arm_r_joint4",
-            "arm_r_joint5", "arm_r_joint6", "arm_r_joint7", "gripper_r_joint1",
-            "head_joint1", "head_joint2", "lift_joint",
-        ],
+        "joint_names": list(FFW_SG2_PUBLISHED_JOINT_NAMES),
         "cameras": {
             "cam_head": {"height": 376, "width": 672},
+        }
+    },
+    "FFW_SG2_SHOWROOM": {
+        "action_dim": 22,
+        "state_dim": 25,
+        "action_names": [*FFW_SG2_ACTION_JOINT_NAMES, "base_vx", "base_vy", "base_wz"],
+        "state_names": [
+            *FFW_SG2_PUBLISHED_JOINT_NAMES,
+            "base_x", "base_y", "base_yaw",
+            "base_vx", "base_vy", "base_wz",
+        ],
+        "cameras": {
+            "cam_head": {"height": 720, "width": 1280},
+            "cam_wrist_left": {"height": 480, "width": 640},
+            "cam_wrist_right": {"height": 480, "width": 640},
         }
     }
 }
 
-def get_env_features(fps: int, robot_type: str):
+def get_env_features(fps: int, robot_type: str, camera_shapes: dict[str, dict[str, int]] | None = None):
     if robot_type not in ROBOT_CONFIGS:
         raise ValueError(f"Unsupported robot type: {robot_type}")
     
     config = ROBOT_CONFIGS[robot_type]
+    camera_shapes = camera_shapes or {}
     
+    action_dim = config["action_dim"] if "action_dim" in config else config["expected_dim"]
+    state_dim = config["state_dim"] if "state_dim" in config else config["expected_dim"]
+    action_names = config["action_names"] if "action_names" in config else config["joint_names"]
+    state_names = config["state_names"] if "state_names" in config else config["joint_names"]
+
     # Build action and observation.state features
     features = {
         "action": {
             "dtype": "float32",
-            "shape": (config["expected_dim"],),
-            "names": config["joint_names"],
+            "shape": (action_dim,),
+            "names": action_names,
         },
         "observation.state": {
             "dtype": "float32",
-            "shape": (config["expected_dim"],),
-            "names": config["joint_names"],
+            "shape": (state_dim,),
+            "names": state_names,
         }
     }
     
     # Add camera features
     for cam_name, cam_cfg in config["cameras"].items():
+        cam_shape = camera_shapes.get(cam_name, {})
+        height = int(cam_shape.get("height", cam_cfg["height"]))
+        width = int(cam_shape.get("width", cam_cfg["width"]))
         features[f"observation.images.{cam_name}"] = {
             "dtype": "video",
-            "shape": [cam_cfg["height"], cam_cfg["width"], 3],
+            "shape": [height, width, 3],
             "names": ["height", "width", "channels"],
             "video_info": {
-                "video.height": cam_cfg["height"],
-                "video.width": cam_cfg["width"],
+                "video.height": height,
+                "video.width": width,
                 "video.codec": "libx264",
                 "video.pix_fmt": "yuv420p",
                 "video.is_depth_map": False,
@@ -94,7 +120,127 @@ def get_env_features(fps: int, robot_type: str):
     
     return features
 
-def process_data(dataset: LeRobotDataset, task: str, demo_group: h5py.Group, demo_name: str, frame_skip: int, robot_type: str) -> bool:
+
+def _infer_camera_shapes_from_hdf5(dataset_file: str, robot_type: str) -> dict[str, dict[str, int]]:
+    """Infer recorded camera image sizes from the first valid HDF5 demo."""
+    if robot_type not in ROBOT_CONFIGS:
+        raise ValueError(f"Unsupported robot type: {robot_type}")
+
+    camera_shapes: dict[str, dict[str, int]] = {}
+    camera_keys = list(ROBOT_CONFIGS[robot_type]["cameras"].keys())
+    with h5py.File(dataset_file, "r") as f:
+        if "data" not in f:
+            return camera_shapes
+        for demo_name in f["data"].keys():
+            demo_group = f["data"][demo_name]
+            for cam_key in camera_keys:
+                dataset_key = f"obs/{cam_key}"
+                if dataset_key not in demo_group:
+                    continue
+                shape = demo_group[dataset_key].shape
+                if len(shape) < 4:
+                    continue
+                if shape[-1] not in (1, 3, 4):
+                    continue
+                camera_shapes[cam_key] = {"height": int(shape[-3]), "width": int(shape[-2])}
+            if camera_shapes:
+                break
+
+    return camera_shapes
+
+
+def _read_timestamps(demo_group: h5py.Group) -> np.ndarray | None:
+    """Read per-frame wall-clock timestamps from a recorded HDF5 demo."""
+    for key in ("obs/timestamp", "obs/wall_time", "timestamp"):
+        if key in demo_group:
+            timestamps = np.asarray(demo_group[key], dtype=np.float64).reshape(-1)
+            if timestamps.size > 0:
+                return timestamps
+    return None
+
+
+def _select_frame_indices(
+    total_frames: int,
+    frame_skip: int,
+    frame_stride: int,
+    fps: int,
+    timestamps: np.ndarray | None,
+    resample_by_time: bool,
+    demo_name: str,
+) -> list[int]:
+    """Select source frame indices using either fixed stride or timestamp-based resampling."""
+    if frame_skip < 0:
+        raise ValueError(f"frame_skip must be >= 0, got {frame_skip}")
+    if frame_stride < 1:
+        raise ValueError(f"frame_stride must be >= 1, got {frame_stride}")
+    if fps <= 0:
+        raise ValueError(f"fps must be positive, got {fps}")
+
+    source_indices = np.arange(frame_skip, total_frames, frame_stride, dtype=np.int64)
+    if source_indices.size == 0:
+        return []
+
+    if not resample_by_time:
+        return source_indices.tolist()
+
+    if timestamps is None:
+        print(f"[WARN] Demo {demo_name} has no timestamps; falling back to frame_stride={frame_stride}.")
+        return source_indices.tolist()
+
+    if timestamps.shape[0] < total_frames:
+        print(
+            f"[WARN] Demo {demo_name} timestamp length ({timestamps.shape[0]}) is shorter than frame count "
+            f"({total_frames}); falling back to frame_stride={frame_stride}."
+        )
+        return source_indices.tolist()
+
+    source_timestamps = timestamps[source_indices]
+    finite_mask = np.isfinite(source_timestamps)
+    if not finite_mask.all():
+        source_indices = source_indices[finite_mask]
+        source_timestamps = source_timestamps[finite_mask]
+    if source_indices.size == 0:
+        return []
+
+    # Normalize per episode, then enforce monotonic order. If timestamps are not
+    # monotonic enough to resample, keep the older frame-stride behavior.
+    source_timestamps = source_timestamps - source_timestamps[0]
+    if source_timestamps.size < 2 or source_timestamps[-1] <= 0.0:
+        print(f"[WARN] Demo {demo_name} timestamps have no positive duration; falling back to frame_stride.")
+        return source_indices.tolist()
+    if np.any(np.diff(source_timestamps) < 0.0):
+        print(f"[WARN] Demo {demo_name} timestamps are not monotonic; falling back to frame_stride.")
+        return source_indices.tolist()
+
+    target_period = 1.0 / fps
+    target_timestamps = np.arange(0.0, source_timestamps[-1] + 0.5 * target_period, target_period)
+    right = np.searchsorted(source_timestamps, target_timestamps, side="left")
+    right = np.clip(right, 0, source_timestamps.shape[0] - 1)
+    left = np.clip(right - 1, 0, source_timestamps.shape[0] - 1)
+    choose_left = np.abs(source_timestamps[left] - target_timestamps) <= np.abs(
+        source_timestamps[right] - target_timestamps
+    )
+    selected_offsets = np.where(choose_left, left, right)
+    selected_indices = source_indices[selected_offsets]
+
+    measured_hz = (source_timestamps.size - 1) / source_timestamps[-1]
+    print(
+        f"[INFO] Demo {demo_name}: timestamp resample {source_timestamps.size} frames "
+        f"({measured_hz:.2f} Hz measured) -> {selected_indices.size} frames at {fps} Hz."
+    )
+    return selected_indices.astype(np.int64).tolist()
+
+def process_data(
+    dataset: LeRobotDataset,
+    task: str,
+    demo_group: h5py.Group,
+    demo_name: str,
+    frame_skip: int,
+    frame_stride: int,
+    fps: int,
+    resample_by_time: bool,
+    robot_type: str,
+) -> bool:
     """
     Process a single demonstration group from the HDF5 dataset
     and add it into the LeRobot dataset.
@@ -106,14 +252,19 @@ def process_data(dataset: LeRobotDataset, task: str, demo_group: h5py.Group, dem
     camera_keys = list(config["cameras"].keys())
     
     try:
-        # Load action and joint position data
+        # Load action and state data
         actions = np.array(demo_group['actions'], dtype=np.float32)
         joint_pos = np.array(demo_group['obs/joint_pos'], dtype=np.float32)
+        if robot_type == "FFW_SG2_SHOWROOM":
+            base_pose = np.array(demo_group['obs/base_pose'], dtype=np.float32)
+            base_twist = np.array(demo_group['obs/base_twist'], dtype=np.float32)
+            joint_pos = np.concatenate([joint_pos, base_pose, base_twist], axis=-1)
         
-        # Load camera images based on robot type
+        # Keep camera datasets lazy. Showroom recordings contain high-resolution
+        # images and loading every camera into RAM at once is unnecessarily heavy.
         camera_data = {}
         for cam_key in camera_keys:
-            camera_data[cam_key] = np.array(demo_group[f'obs/{cam_key}'], dtype=np.uint8)
+            camera_data[cam_key] = demo_group[f'obs/{cam_key}']
             
     except KeyError as e:
         print(f"Demo {demo_name} is not valid (missing key: {e}), skipping...")
@@ -124,17 +275,31 @@ def process_data(dataset: LeRobotDataset, task: str, demo_group: h5py.Group, dem
         return False
 
     # Ensure actions and joint positions are 2D arrays
+    action_dim = config["action_dim"] if "action_dim" in config else config["expected_dim"]
+    state_dim = config["state_dim"] if "state_dim" in config else config["expected_dim"]
     if actions.ndim == 1:
-        actions = actions.reshape(-1, config["expected_dim"])
+        actions = actions.reshape(-1, action_dim)
     if joint_pos.ndim == 1:
-        joint_pos = joint_pos.reshape(-1, config["expected_dim"])
+        joint_pos = joint_pos.reshape(-1, state_dim)
     
     total_state_frames = actions.shape[0]
 
+    timestamps = _read_timestamps(demo_group)
+    frame_indices = _select_frame_indices(
+        total_frames=total_state_frames,
+        frame_skip=frame_skip,
+        frame_stride=frame_stride,
+        fps=fps,
+        timestamps=timestamps,
+        resample_by_time=resample_by_time,
+        demo_name=demo_name,
+    )
+    if not frame_indices:
+        print(f"Demo {demo_name} has no selected frames, skipping...")
+        return False
+
     # Process each frame
-    for frame_index in tqdm(range(total_state_frames), desc=f"Processing demo {demo_name}"):
-        if frame_index < frame_skip:
-            continue
+    for frame_index in tqdm(frame_indices, desc=f"Processing demo {demo_name}"):
         
         # Build frame dictionary
         frame = {
@@ -152,20 +317,28 @@ def process_data(dataset: LeRobotDataset, task: str, demo_group: h5py.Group, dem
 
 def convert_isaaclab_to_lerobot(
     task: str, repo_id: str, robot_type: str, dataset_file: str,
-    fps: int, push_to_hub: bool = False, frame_skip: int = 3, root: str = "./datasets/lerobot/sim2real_data"
+    fps: int, push_to_hub: bool = False, frame_skip: int = 3, frame_stride: int = 1,
+    resample_by_time: bool = False,
+    root: str = "./datasets/lerobot/sim2real_data"
 ):
     """
     Convert an IsaacLab HDF5 dataset into LeRobot dataset format.
     """
     hdf5_files = [dataset_file]
     now_episode_index = 0
+    camera_shapes = _infer_camera_shapes_from_hdf5(dataset_file, robot_type)
+    if camera_shapes:
+        shape_text = ", ".join(
+            f"{name}={shape['width']}x{shape['height']}" for name, shape in sorted(camera_shapes.items())
+        )
+        print(f"[INFO] Inferred camera feature shapes from HDF5: {shape_text}")
 
     # Create a new LeRobot dataset
     dataset = LeRobotDataset.create(
         repo_id=repo_id,
         fps=fps,
         robot_type=robot_type,
-        features=get_env_features(fps, robot_type),
+        features=get_env_features(fps, robot_type, camera_shapes=camera_shapes),
         root=root,
     )
 
@@ -184,7 +357,17 @@ def convert_isaaclab_to_lerobot(
                     print(f"Demo {demo_name} not successful, skipping...")
                     continue
 
-                valid = process_data(dataset, task, demo_group, demo_name, frame_skip, robot_type)
+                valid = process_data(
+                    dataset,
+                    task,
+                    demo_group,
+                    demo_name,
+                    frame_skip,
+                    frame_stride,
+                    fps,
+                    resample_by_time,
+                    robot_type,
+                )
 
                 if valid:
                     now_episode_index += 1
@@ -203,13 +386,38 @@ if __name__ == "__main__":
     parser.add_argument("--dataset_file", type=str, default="./datasets/dataset.hdf5", help="Path to dataset HDF5 file")
     parser.add_argument("--fps", type=int, default=10, help="Frames per second for dataset (default: 10)")
     parser.add_argument("--push_to_hub", action="store_true", help="Whether to push dataset to HuggingFace Hub")
-    parser.add_argument("--frame_skip", type=int, default=2, help="Frame skip rate (default: 2)")
+    parser.add_argument(
+        "--frame_skip",
+        type=int,
+        default=2,
+        help="Number of initial frames to drop from each demo (default: 2)",
+    )
+    parser.add_argument(
+        "--frame_stride",
+        type=int,
+        default=1,
+        help="Keep every Nth frame after frame_skip. Use 4 to convert 60Hz recordings to 15Hz (default: 1)",
+    )
+    parser.add_argument(
+        "--resample_by_time",
+        action="store_true",
+        help="Use HDF5 timestamps to resample onto the requested --fps time grid when timestamps are available.",
+    )
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M")
     default_repo_id = f"./datasets/lerobot/{timestamp}"
     parser.add_argument("--repo_id", type=str, default=default_repo_id, help=f"Repo ID (default: {default_repo_id})")
+    parser.add_argument(
+        "--root",
+        type=str,
+        default=None,
+        help="Local LeRobot dataset root. Defaults to repo_id when repo_id is a local path, otherwise a timestamped path.",
+    )
 
     args = parser.parse_args()
+    root = args.root
+    if root is None:
+        root = args.repo_id if args.repo_id.startswith((".", "/")) else default_repo_id
 
     convert_isaaclab_to_lerobot(
         task=args.task,
@@ -219,5 +427,7 @@ if __name__ == "__main__":
         fps=args.fps,
         push_to_hub=args.push_to_hub,
         frame_skip=args.frame_skip,
-        root=default_repo_id,
+        frame_stride=args.frame_stride,
+        resample_by_time=args.resample_by_time,
+        root=root,
     )

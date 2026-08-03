@@ -109,9 +109,7 @@ Fixed
 ------------------
 ### OMY Sim2Real Imitation Learning Pipeline
 * Folder Structure Refactor:
-    * Tasks are now separated and organized into two categories:
-        * real_world_tasks – for real robot execution
-        * simulator_tasks – for simulation environments
+    * Tasks are organized under the unified ``cyclo_lab.manager_based`` package.
 * Sim2Real Pipeline Implementation:
     * Task Recording: Added functionality to record demonstrations for the OMY plastic bottle pick-and-place task in simulation.
     * Sub-task Annotation: Introduced annotation tools for splitting demonstrations into meaningful sub-tasks, improving policy learning efficiency.

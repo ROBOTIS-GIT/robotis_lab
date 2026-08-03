@@ -41,6 +41,13 @@ def parse_args():
     parser.add_argument("--base_frame", default="base_link", help="ROS base frame name for joint_states, odometry, and TF.")
     parser.add_argument("--base_body", default="world", help="SG2 USD body name to use for the base pose in Isaac Sim.")
     parser.add_argument("--max_runtime", type=float, default=0.0, help="Stop after this many seconds. 0 means run until closed.")
+    parser.add_argument("--profile", action="store_true", help="Print timing statistics for the SG2 runtime loop.")
+    parser.add_argument("--profile_interval", type=int, default=120, help="Runtime loop iterations between profile reports.")
+    parser.add_argument(
+        "--profile_cuda_sync",
+        action="store_true",
+        help="Synchronize CUDA around profiled sections for more accurate GPU timing. This adds overhead.",
+    )
     parser.add_argument("--print_robot_info", action="store_true", help="Print SG2 joint and body names after the scene is ready.")
     AppLauncher.add_app_launcher_args(parser)
     return parser.parse_args()
@@ -54,7 +61,7 @@ def main():
     app_launcher = AppLauncher(args_cli)
     simulation_app = app_launcher.app
 
-    from cyclo_lab.sim2real.runtime.sg2_app import close_simulation_app, main as run_sg2_runtime
+    from cyclo_lab.runtime.bridges.sg2.app import close_simulation_app, main as run_sg2_runtime
 
     try:
         run_sg2_runtime(args_cli, simulation_app)

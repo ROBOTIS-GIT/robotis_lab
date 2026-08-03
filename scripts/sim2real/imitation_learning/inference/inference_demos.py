@@ -89,10 +89,10 @@ def main():
 
     # teleop interface
     if args_cli.robot_type == "OMY":
-        from cyclo_lab.sim2real.teleop.omy_sdk import OMYSdk
+        from cyclo_lab.runtime.sdk.omy import OMYSdk
         teleop_interface = OMYSdk(env, mode='inference')
     elif args_cli.robot_type == "FFW_SG2":
-        from cyclo_lab.sim2real.teleop.ffw_sg2_sdk import FFWSG2Sdk
+        from cyclo_lab.runtime.sdk.ffw_sg2 import FFWSG2Sdk
         teleop_interface = FFWSG2Sdk(env, mode='inference')
     else:
         raise ValueError(f"Unsupported robot type: {args_cli.robot_type}")
@@ -120,6 +120,7 @@ def main():
                 print("[INFO] Reset requested.")
                 should_reset_task = False
                 env.reset()
+                teleop_interface.reset()
                 continue
 
             elif actions is None:

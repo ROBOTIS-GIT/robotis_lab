@@ -26,6 +26,8 @@ import multiprocessing
 if multiprocessing.get_start_method() != "spawn":
     multiprocessing.set_start_method("spawn", force=True)
 import argparse
+import contextlib
+from collections import defaultdict
 
 from isaaclab.app import AppLauncher
 
@@ -39,6 +41,37 @@ parser.add_argument("--seed", type=int, default=42, help="Seed for the environme
 parser.add_argument("--step_hz", type=int, default=60, help="Environment stepping rate in Hz.")
 parser.add_argument("--dataset_file", type=str, default="./datasets/dataset.hdf5", help="File path to export recorded demos.")
 parser.add_argument("--num_demos", type=int, default=0, help="Number of demonstrations to record. Set to 0 for infinite.")
+parser.add_argument("--flush_steps", type=int, default=30, help="Streaming HDF5 flush interval in environment steps.")
+parser.add_argument(
+    "--camera_set",
+    type=str,
+    default="all",
+    choices=("all", "head", "none"),
+    help="Camera sensors to record when the task supports camera subsets.",
+)
+parser.add_argument(
+    "--camera_size",
+    type=int,
+    default=0,
+    help="Square camera resolution for tasks that support camera resizing. Use 0 for task defaults.",
+)
+parser.add_argument(
+    "--publish_camera_topics",
+    action="store_true",
+    help="Publish compressed camera topics while recording. HDF5 camera recording does not require this.",
+)
+parser.add_argument(
+    "--publish_extra_state_topics",
+    action="store_true",
+    help="Publish odom/tf in addition to /joint_states while recording.",
+)
+parser.add_argument("--profile", action="store_true", help="Print timing statistics for the recording loop.")
+parser.add_argument("--profile_interval", type=int, default=120, help="Loop iterations between profile reports.")
+parser.add_argument(
+    "--profile_cuda_sync",
+    action="store_true",
+    help="Synchronize CUDA around profiled sections for more accurate GPU timing. This adds overhead.",
+)
 
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
@@ -75,21 +108,115 @@ class RateLimiter:
         self.hz = hz
         self.last_time = time.time()
         self.sleep_duration = 1.0 / hz
-        self.render_period = min(0.0166, self.sleep_duration)
 
-    def sleep(self, env):
+    def sleep(self):
         """Attempt to sleep at the specified rate in hz."""
         next_wakeup_time = self.last_time + self.sleep_duration
-        while time.time() < next_wakeup_time:
-            time.sleep(self.render_period)
-            env.sim.render()
+        sleep_time = next_wakeup_time - time.time()
+        if sleep_time > 0.0:
+            time.sleep(sleep_time)
+            self.last_time = next_wakeup_time
+        else:
+            self.last_time = time.time()
 
-        self.last_time = self.last_time + self.sleep_duration
 
-        # detect time jumping forwards (e.g. loop is too slow)
-        if self.last_time < time.time():
-            while self.last_time < time.time():
-                self.last_time += self.sleep_duration
+class LoopProfiler:
+    """Small timing profiler for the demonstration recorder."""
+
+    def __init__(self, enabled: bool, interval: int, cuda_sync: bool = False):
+        self.enabled = enabled
+        self.interval = max(1, int(interval))
+        self.cuda_sync = bool(cuda_sync)
+        self.loop_count = 0
+        self._window_start = time.perf_counter()
+        self._stats = defaultdict(lambda: {"count": 0, "total": 0.0, "max": 0.0})
+
+    def _sync(self):
+        if self.cuda_sync and torch.cuda.is_available():
+            torch.cuda.synchronize()
+
+    @contextlib.contextmanager
+    def time(self, name: str):
+        if not self.enabled:
+            yield
+            return
+        self._sync()
+        start = time.perf_counter()
+        try:
+            yield
+        finally:
+            self._sync()
+            elapsed = time.perf_counter() - start
+            stat = self._stats[name]
+            stat["count"] += 1
+            stat["total"] += elapsed
+            stat["max"] = max(stat["max"], elapsed)
+
+    def tick(self):
+        if not self.enabled:
+            return
+        self.loop_count += 1
+        if self.loop_count % self.interval != 0:
+            return
+
+        now = time.perf_counter()
+        window_elapsed = max(now - self._window_start, 1e-9)
+        measured_hz = self.interval / window_elapsed
+        loop_total = self._stats.get("loop_total", {}).get("total", 0.0)
+
+        print(f"\n[PROFILE] last {self.interval} loops: wall_hz={measured_hz:.2f}")
+        rows = sorted(
+            self._stats.items(),
+            key=lambda item: item[1]["total"],
+            reverse=True,
+        )
+        for name, stat in rows:
+            if stat["count"] == 0:
+                continue
+            percent = (stat["total"] / loop_total * 100.0) if loop_total > 0.0 and name != "loop_total" else 0.0
+            print(
+                f"[PROFILE] {name:36s} "
+                f"mean={stat['total'] / stat['count'] * 1000.0:8.2f}ms "
+                f"max={stat['max'] * 1000.0:8.2f}ms "
+                f"total={stat['total']:7.3f}s "
+                f"n={stat['count']:5d} "
+                f"{percent:5.1f}%"
+            )
+        self._stats.clear()
+        self._window_start = now
+
+
+def install_profile_hook(obj, method_name: str, label: str, profiler: LoopProfiler):
+    """Wrap an instance method with a profiler timer."""
+    if not profiler.enabled or not hasattr(obj, method_name):
+        return
+    original = getattr(obj, method_name)
+    if getattr(original, "_cyclo_profile_wrapped", False):
+        return
+
+    def wrapped(*args, **kwargs):
+        with profiler.time(label):
+            return original(*args, **kwargs)
+
+    wrapped._cyclo_profile_wrapped = True
+    try:
+        setattr(obj, method_name, wrapped)
+    except Exception as exc:
+        print(f"[PROFILE] Failed to install hook for {label}: {exc}")
+
+
+def install_env_profile_hooks(env, profiler: LoopProfiler):
+    """Install coarse Isaac Lab manager timing hooks."""
+    install_profile_hook(env.observation_manager, "compute", "isaaclab_observation_compute", profiler)
+    install_profile_hook(env.termination_manager, "compute", "isaaclab_termination_compute", profiler)
+    install_profile_hook(env.reward_manager, "compute", "isaaclab_reward_compute", profiler)
+    install_profile_hook(env.command_manager, "compute", "isaaclab_command_compute", profiler)
+    install_profile_hook(env.action_manager, "process_action", "isaaclab_action_process", profiler)
+    install_profile_hook(env.action_manager, "apply_action", "isaaclab_action_apply", profiler)
+    install_profile_hook(env.scene, "write_data_to_sim", "isaaclab_scene_write", profiler)
+    install_profile_hook(env.scene, "update", "isaaclab_scene_update", profiler)
+    install_profile_hook(env.sim, "step", "isaaclab_sim_step", profiler)
+    install_profile_hook(env.sim, "render", "isaaclab_sim_render", profiler)
 
 
 def main():
@@ -104,6 +231,15 @@ def main():
 
     env_cfg = parse_env_cfg(args_cli.task, device=args_cli.device, num_envs=1)
     env_cfg.init_action_cfg("record")
+    if hasattr(env_cfg, "set_camera_set"):
+        env_cfg.set_camera_set(args_cli.camera_set)
+    elif args_cli.camera_set != "all":
+        print(f"[WARN] Task {args_cli.task} does not support --camera_set; using its default cameras.")
+    if args_cli.camera_size > 0:
+        if hasattr(env_cfg, "set_camera_resolution"):
+            env_cfg.set_camera_resolution(args_cli.camera_size, args_cli.camera_size)
+        else:
+            print(f"[WARN] Task {args_cli.task} does not support --camera_size; using its default resolution.")
     env_cfg.seed = args_cli.seed
     task_name = args_cli.task
 
@@ -128,21 +264,47 @@ def main():
     # Ensure dataset file handler is created, but keep stepping in no-save mode
     env_cfg.recorders.dataset_export_mode = DatasetExportMode.EXPORT_ALL
     env.recorder_manager = StreamingRecorderManager(env_cfg.recorders, env)
-    env.recorder_manager.flush_steps = 100
+    env.recorder_manager.flush_steps = args_cli.flush_steps
     env.recorder_manager.compression = 'lzf'
     env.recorder_manager.cfg.dataset_export_mode = DatasetExportMode.EXPORT_NONE
+    env.recorder_manager.recording_enabled = False
+    profiler = LoopProfiler(
+        enabled=args_cli.profile,
+        interval=args_cli.profile_interval,
+        cuda_sync=args_cli.profile_cuda_sync,
+    )
+    env.recorder_manager.profiler = profiler
+    install_env_profile_hooks(env, profiler)
 
     # create controller
     if args_cli.robot_type == "OMY":
-        from cyclo_lab.sim2real.teleop.omy_sdk import OMYSdk
-        teleop_interface = OMYSdk(env, mode='record')
+        from cyclo_lab.runtime.sdk.omy import OMYSdk
+        teleop_interface = OMYSdk(
+            env,
+            mode='record',
+            camera_publish_hz=None if args_cli.publish_camera_topics else 0.0,
+        )
     elif args_cli.robot_type == "FFW_SG2":
-        from cyclo_lab.sim2real.teleop.ffw_sg2_sdk import FFWSG2Sdk
-        teleop_interface = FFWSG2Sdk(env, mode='record')
+        from cyclo_lab.runtime.sdk.ffw_sg2 import FFWSG2Sdk
+        teleop_interface = FFWSG2Sdk(
+            env,
+            mode='record',
+            camera_publish_hz=None if args_cli.publish_camera_topics else 0.0,
+            publish_odometry_tf=args_cli.publish_extra_state_topics,
+        )
     else:
         raise ValueError(
             f"Invalid device interface '{args_cli.robot_type}'. Supported: 'OMY', 'FFW_SG2'."
         )
+
+    start_record_state = False
+
+    def clear_episode_cache(context: str):
+        try:
+            env.recorder_manager._clear_episode_cache()
+        except Exception as e:
+            print(f"Warning: Failed to clear {context} episode cache: {e}")
+            print(f"Exception details: {type(e).__name__}: {str(e)}")
 
     # add teleoperation key for env reset
     should_reset_recording_instance = False
@@ -156,6 +318,9 @@ def main():
 
     def reset_task_success():
         nonlocal should_reset_task_success
+        if not start_record_state:
+            print("[Control] Save ignored because recording has not started.")
+            return
         should_reset_task_success = True
         reset_recording_instance()
 
@@ -170,78 +335,102 @@ def main():
 
     current_recorded_demo_count = 0
 
-    start_record_state = False
+    should_start_recording_instance = False
+
+    def start_recording_instance():
+        nonlocal start_record_state
+        if start_record_state:
+            return
+        clear_episode_cache("pre-recording")
+        env.recorder_manager.recording_enabled = True
+        env.recorder_manager.record_post_reset(torch.arange(env.num_envs, device=env.device))
+        start_record_state = True
+        print("Start Recording!!!")
+
+    def request_start_recording_instance():
+        nonlocal should_start_recording_instance
+        should_start_recording_instance = True
+
+    teleop_interface.add_callback("B", request_start_recording_instance)
 
     # simulate environment
     while simulation_app.is_running():
         # run everything in inference mode
-        with torch.inference_mode():
-            teleop_interface.publish_observations()
-            actions = teleop_interface.get_action()
-            if should_reset_task_success:
-                print("Task Success!!!")
-                should_reset_task_success = False
-                env.termination_manager.set_term_cfg("success", TerminationTermCfg(func=lambda env: torch.ones(env.num_envs, dtype=torch.bool, device=env.device)))
-                env.termination_manager.compute()
-                # Mark current buffered episode(s) as successful and export before resetting
-                try:
-                    for env_id, ep in getattr(env.recorder_manager, "_episodes", {}).items():
-                        if ep is not None and not ep.is_empty():
-                            ep.success = True
-                except Exception as e:
-                    print(f"Warning: Failed to mark episodes as successful: {e}")
-                    print(f"Exception details: {type(e).__name__}: {str(e)}")
+        with profiler.time("loop_total"):
+            with torch.inference_mode():
+                with profiler.time("publish_observations"):
+                    teleop_interface.publish_observations()
+                with profiler.time("get_action"):
+                    actions = teleop_interface.get_action()
+                if should_start_recording_instance:
+                    should_start_recording_instance = False
+                    with profiler.time("start_recording"):
+                        start_recording_instance()
+                if should_reset_task_success:
+                    with profiler.time("save_success_export"):
+                        print("Task Success!!!")
+                        should_reset_task_success = False
+                        env.termination_manager.set_term_cfg("success", TerminationTermCfg(func=lambda env: torch.ones(env.num_envs, dtype=torch.bool, device=env.device)))
+                        env.termination_manager.compute()
+                        # Mark current buffered episode(s) as successful and export before resetting
+                        try:
+                            for env_id, ep in getattr(env.recorder_manager, "_episodes", {}).items():
+                                if ep is not None and not ep.is_empty():
+                                    ep.success = True
+                        except Exception as e:
+                            print(f"Warning: Failed to mark episodes as successful: {e}")
+                            print(f"Exception details: {type(e).__name__}: {str(e)}")
 
-                env.recorder_manager.cfg.dataset_export_mode = DatasetExportMode.EXPORT_ALL
-                env.recorder_manager.export_episodes(from_step=False)
-                env.recorder_manager.cfg.dataset_export_mode = DatasetExportMode.EXPORT_NONE
-                # Update and report successful demo count immediately after export
-                if env.recorder_manager.exported_successful_episode_count > current_recorded_demo_count:
-                    current_recorded_demo_count = env.recorder_manager.exported_successful_episode_count
-                    print(f"Recorded {current_recorded_demo_count} successful demonstrations.")
-            if should_reset_recording_instance:
-                # Clear any buffered episode so failed episodes (key 'R') aren't saved
-                try:
-                    env.recorder_manager._clear_episode_cache()
-                except Exception as e:
-                    print(f"Warning: Failed to clear episode cache: {e}")
-                    print(f"Exception details: {type(e).__name__}: {str(e)}")
+                        env.recorder_manager.cfg.dataset_export_mode = DatasetExportMode.EXPORT_ALL
+                        env.recorder_manager.export_episodes(from_step=False)
+                        env.recorder_manager.cfg.dataset_export_mode = DatasetExportMode.EXPORT_NONE
+                        # Update and report successful demo count immediately after export
+                        if env.recorder_manager.exported_successful_episode_count > current_recorded_demo_count:
+                            current_recorded_demo_count = env.recorder_manager.exported_successful_episode_count
+                            print(f"Recorded {current_recorded_demo_count} successful demonstrations.")
+                if should_reset_recording_instance:
+                    with profiler.time("reset_recording"):
+                        # Clear any buffered episode so failed episodes (key 'R') aren't saved
+                        env.recorder_manager.recording_enabled = False
+                        clear_episode_cache("recording")
 
-                env.reset()
-                should_reset_recording_instance = False
-                if start_record_state:
-                    print("Stop Recording!!!")
-                start_record_state = False
-                env.termination_manager.set_term_cfg("success", TerminationTermCfg(func=lambda env: torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)))
-                # print out the current demo count if it has changed
-                print(f"Resetting recording instance. Current recorded demo count: {current_recorded_demo_count}")
-                if env.recorder_manager.exported_successful_episode_count > current_recorded_demo_count:
-                    current_recorded_demo_count = env.recorder_manager.exported_successful_episode_count
-                    print(f"Recorded {current_recorded_demo_count} successful demonstrations.")
-                if args_cli.num_demos > 0 and env.recorder_manager.exported_successful_episode_count >= args_cli.num_demos:
-                    print(f"All {args_cli.num_demos} demonstrations recorded. Exiting the app.")
-                    break
+                        env.reset()
+                        should_reset_recording_instance = False
+                        if start_record_state:
+                            print("Stop Recording!!!")
+                        start_record_state = False
+                        env.termination_manager.set_term_cfg("success", TerminationTermCfg(func=lambda env: torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)))
+                        # print out the current demo count if it has changed
+                        print(f"Resetting recording instance. Current recorded demo count: {current_recorded_demo_count}")
+                        if env.recorder_manager.exported_successful_episode_count > current_recorded_demo_count:
+                            current_recorded_demo_count = env.recorder_manager.exported_successful_episode_count
+                            print(f"Recorded {current_recorded_demo_count} successful demonstrations.")
+                        if args_cli.num_demos > 0 and env.recorder_manager.exported_successful_episode_count >= args_cli.num_demos:
+                            print(f"All {args_cli.num_demos} demonstrations recorded. Exiting the app.")
+                            break
 
-            elif actions is None:
-                env.render()
-            # apply actions
-            else:
-                if isinstance(actions, dict):
-                    # Handle dictionary actions (like reset)
-                    if "reset" in actions:
-                        # This is a reset action, don't step the environment
+                elif actions is None:
+                    with profiler.time("env_render_no_action"):
                         env.render()
-                        continue
+                # apply actions
                 else:
-                    # Handle tensor actions
-                    if actions.ndim == 1:
-                        actions = actions.unsqueeze(0)
-                    if not start_record_state:
-                        print("Start Recording!!!")
-                        start_record_state = True
-                    env.step(actions)
-            if rate_limiter:
-                rate_limiter.sleep(env)
+                    if isinstance(actions, dict):
+                        # Handle dictionary actions (like reset)
+                        if "reset" in actions:
+                            # This is a reset action, don't step the environment
+                            with profiler.time("env_render_reset_action"):
+                                env.render()
+                            continue
+                    else:
+                        # Handle tensor actions
+                        if actions.ndim == 1:
+                            actions = actions.unsqueeze(0)
+                        with profiler.time("env_step"):
+                            env.step(actions)
+                if rate_limiter:
+                    with profiler.time("rate_sleep"):
+                        rate_limiter.sleep()
+        profiler.tick()
 
     # close the simulator
     env.close()

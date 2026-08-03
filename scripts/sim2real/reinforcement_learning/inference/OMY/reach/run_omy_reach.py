@@ -22,7 +22,7 @@ import time
 
 import numpy as np
 
-from cyclo_lab.sim2real.transport.ros2_zenoh import (
+from cyclo_lab.runtime.transport.ros2_zenoh import (
     JOINT_STATE,
     JOINT_TRAJECTORY,
     TF_MESSAGE,
@@ -35,7 +35,7 @@ from cyclo_lab.sim2real.transport.ros2_zenoh import (
     transform_stamped_msg,
 )
 
-from cyclo_lab.sim2real.rl.policy_executor import PolicyExecutor
+from cyclo_lab.runtime.policy_executor import PolicyExecutor
 from reach_env_cfg import ReachEnvConfig
 
 

@@ -11,11 +11,18 @@ from __future__ import annotations
 from pathlib import Path
 
 
+ROBOTIS_SHOWROOM_BASE_USD_PATH = str(
+    Path(__file__).resolve().parents[3]
+    / "data/environments/robotis_showroom/robotis_showroom.usd"
+)
+ROBOTIS_SHOWROOM_OBJECTS_USD_PATH = str(
+    Path(__file__).resolve().parents[3]
+    / "data/environments/robotis_showroom/robotis_showroom_objects.usd"
+)
 ROBOTIS_SHOWROOM_USD_PATH = str(
     Path(__file__).resolve().parents[3]
     / "data/environments/robotis_showroom/robotis_showroom_scene.usda"
 )
-FIXED_WORLD_USD_PATH = ROBOTIS_SHOWROOM_USD_PATH
 
 ROBOTIS_SHOWROOM_ENVIRONMENT_POS = (0.0, 0.0, 0.0)
 ROBOTIS_SHOWROOM_ENVIRONMENT_ROT = (1.0, 0.0, 0.0, 0.0)
@@ -105,7 +112,3 @@ def make_robotis_showroom_environment_cfg(usd_path: str | None = None):
             rot=ROBOTIS_SHOWROOM_ENVIRONMENT_ROT,
         ),
     )
-
-
-def make_fixed_world_environment_cfg(usd_path: str | None = None) -> AssetBaseCfg:
-    return make_robotis_showroom_environment_cfg(usd_path)

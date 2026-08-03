@@ -230,7 +230,7 @@ Launch the FFW SG2 runtime
 # Publishes the SG2 head and wrist observation camera topics.
 python scripts/sim2real/runtime/sg2_runtime.py --enable_camera
 
-# Robotis showroom environment: source/cyclo_lab/data/environments/robotis_showroom/robotis_showroom_scene.usda
+# Robotis showroom environment: robotis_showroom_scene.usda composes robotis_showroom.usd and robotis_showroom_objects.usd.
 python scripts/sim2real/runtime/sg2_runtime.py --enable_camera --enable_environment
 
 # IsaacLab-Arena Galileo warehouse scene (streams the USD and its dependencies from NVIDIA on first launch)
@@ -329,6 +329,25 @@ https://github.com/user-attachments/assets/cdb3afca-f0db-4fb6-bf17-e361f3aa254b
 ```bash
 python scripts/sim2real/imitation_learning/recorder/record_demos.py --task=Cyclo-Real-Pick-Place-FFW-SG2-v0 --robot_type FFW_SG2 --dataset_file ./datasets/ffw_sg2_raw.hdf5 --num_demos 4 --enable_cameras
 
+```
+
+* Teleop and record demos in Robotis showroom
+```bash
+$ISAACLAB_PATH/isaaclab.sh -p scripts/sim2real/imitation_learning/recorder/record_demos.py --task=Cyclo-Real-Showroom-FFW-SG2-v0 --robot_type FFW_SG2 --dataset_file ./datasets/ffw_sg2_showroom_raw.hdf5 --num_demos 2 --headless --enable_cameras
+```
+
+* Data convert Robotis showroom dataset to LeRobot
+```bash
+source /root/lerobot_env/bin/activate
+python scripts/sim2real/imitation_learning/data_converter/isaaclab2lerobot.py \
+    --task Cyclo-Real-Showroom-FFW-SG2-v0 \
+    --robot_type FFW_SG2_SHOWROOM \
+    --dataset_file ./datasets/ffw_sg2_showroom_raw.hdf5 \
+    --frame_skip 0 \
+    --frame_stride 1 \
+    --resample_by_time \
+    --repo_id cyclo_lab/ffw_sg2_showroom \
+    --root ./datasets/lerobot/ffw_sg2_showroom
 ```
 
 * Mimic generate dataset
