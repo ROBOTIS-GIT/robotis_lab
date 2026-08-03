@@ -33,7 +33,7 @@ if _CYCLO_LAB_SOURCE.is_dir():
     sys.path.insert(0, str(_CYCLO_LAB_SOURCE))
 
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
-from cyclo_lab.robot_specs.ffw.sg2 import FFW_SG2_ACTION_JOINT_NAMES, FFW_SG2_PUBLISHED_JOINT_NAMES
+from cyclo_lab.robot_specs.ffw.sg2 import FFW_SG2_PUBLISHED_JOINT_NAMES
 
 ROBOT_CONFIGS = {
     "OMY": {
@@ -56,20 +56,56 @@ ROBOT_CONFIGS = {
     },
     "FFW_SG2_SHOWROOM": {
         "action_dim": 22,
-        "state_dim": 25,
-        "action_names": [*FFW_SG2_ACTION_JOINT_NAMES, "base_vx", "base_vy", "base_wz"],
+        "state_dim": 22,
+        "action_names": [*FFW_SG2_PUBLISHED_JOINT_NAMES, "linear_x", "linear_y", "angular_z"],
         "state_names": [
             *FFW_SG2_PUBLISHED_JOINT_NAMES,
-            "base_x", "base_y", "base_yaw",
-            "base_vx", "base_vy", "base_wz",
+            "linear_x", "linear_y", "angular_z",
         ],
         "cameras": {
-            "cam_head": {"height": 720, "width": 1280},
-            "cam_wrist_left": {"height": 480, "width": 640},
-            "cam_wrist_right": {"height": 480, "width": 640},
+            "cam_head": {
+                "height": 720,
+                "width": 1280,
+                "feature_key": "observation.images.rgb.cam_left_head",
+            },
+            "cam_wrist_left": {
+                "height": 480,
+                "width": 640,
+                "feature_key": "observation.images.rgb.cam_left_wrist",
+            },
+            "cam_wrist_right": {
+                "height": 480,
+                "width": 640,
+                "feature_key": "observation.images.rgb.cam_right_wrist",
+            },
         }
     }
 }
+
+
+def _ffw_sg2_showroom_action_to_lerobot(actions: np.ndarray) -> np.ndarray:
+    """Convert showroom env actions into the WoodBlock LeRobot SG2 order."""
+    if actions.ndim != 2 or actions.shape[1] != 22:
+        raise ValueError(f"FFW_SG2_SHOWROOM actions must have shape [N, 22], got {tuple(actions.shape)}.")
+
+    # HDF5 actions follow Isaac Lab action-term order:
+    # [arm_l, gripper_l, arm_r, gripper_r, lift, head(2), base_cmd(3)].
+    # WoodBlock LeRobot datasets use:
+    # [arm_l, gripper_l, arm_r, gripper_r, head(2), lift, base_cmd(3)].
+    return np.concatenate(
+        [
+            actions[:, :16],
+            actions[:, 17:19],
+            actions[:, 16:17],
+            actions[:, 19:22],
+        ],
+        axis=-1,
+    )
+
+
+def _camera_feature_key(camera_name: str, camera_cfg: dict) -> str:
+    return camera_cfg.get("feature_key", f"observation.images.{camera_name}")
+
 
 def get_env_features(fps: int, robot_type: str, camera_shapes: dict[str, dict[str, int]] | None = None):
     if robot_type not in ROBOT_CONFIGS:
@@ -102,7 +138,7 @@ def get_env_features(fps: int, robot_type: str, camera_shapes: dict[str, dict[st
         cam_shape = camera_shapes.get(cam_name, {})
         height = int(cam_shape.get("height", cam_cfg["height"]))
         width = int(cam_shape.get("width", cam_cfg["width"]))
-        features[f"observation.images.{cam_name}"] = {
+        features[_camera_feature_key(cam_name, cam_cfg)] = {
             "dtype": "video",
             "shape": [height, width, 3],
             "names": ["height", "width", "channels"],
@@ -249,22 +285,21 @@ def process_data(
         raise ValueError(f"Unsupported robot type: {robot_type}")
     
     config = ROBOT_CONFIGS[robot_type]
-    camera_keys = list(config["cameras"].keys())
+    camera_items = list(config["cameras"].items())
     
     try:
         # Load action and state data
         actions = np.array(demo_group['actions'], dtype=np.float32)
         joint_pos = np.array(demo_group['obs/joint_pos'], dtype=np.float32)
         if robot_type == "FFW_SG2_SHOWROOM":
-            base_pose = np.array(demo_group['obs/base_pose'], dtype=np.float32)
             base_twist = np.array(demo_group['obs/base_twist'], dtype=np.float32)
-            joint_pos = np.concatenate([joint_pos, base_pose, base_twist], axis=-1)
+            joint_pos = np.concatenate([joint_pos, base_twist], axis=-1)
         
         # Keep camera datasets lazy. Showroom recordings contain high-resolution
         # images and loading every camera into RAM at once is unnecessarily heavy.
         camera_data = {}
-        for cam_key in camera_keys:
-            camera_data[cam_key] = demo_group[f'obs/{cam_key}']
+        for cam_key, cam_cfg in camera_items:
+            camera_data[_camera_feature_key(cam_key, cam_cfg)] = demo_group[f'obs/{cam_key}']
             
     except KeyError as e:
         print(f"Demo {demo_name} is not valid (missing key: {e}), skipping...")
@@ -281,6 +316,8 @@ def process_data(
         actions = actions.reshape(-1, action_dim)
     if joint_pos.ndim == 1:
         joint_pos = joint_pos.reshape(-1, state_dim)
+    if robot_type == "FFW_SG2_SHOWROOM":
+        actions = _ffw_sg2_showroom_action_to_lerobot(actions)
     
     total_state_frames = actions.shape[0]
 
@@ -308,8 +345,8 @@ def process_data(
         }
         
         # Add camera images
-        for cam_key in camera_keys:
-            frame[f"observation.images.{cam_key}"] = camera_data[cam_key][frame_index]
+        for feature_key, images in camera_data.items():
+            frame[feature_key] = images[frame_index]
         
         dataset.add_frame(frame=frame, task=task)
 

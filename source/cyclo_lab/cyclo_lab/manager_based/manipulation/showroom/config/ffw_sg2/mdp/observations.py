@@ -5,7 +5,6 @@ from __future__ import annotations
 import time
 
 import torch
-import isaaclab.utils.math as math_utils
 from isaaclab.assets import Articulation
 from isaaclab.envs import ManagerBasedEnv
 
@@ -24,13 +23,6 @@ def joint_pos_target_name(
     asset: Articulation = env.scene[asset_name]
     joint_ids = [asset.joint_names.index(name) for name in joint_names]
     return asset.data.joint_pos_target[:, joint_ids]
-
-
-def base_pose(env: ManagerBasedEnv, asset_name: str = "robot") -> torch.Tensor:
-    asset: Articulation = env.scene[asset_name]
-    root_pos = asset.data.root_pos_w - env.scene.env_origins
-    _, _, yaw = math_utils.euler_xyz_from_quat(asset.data.root_quat_w)
-    return torch.cat([root_pos[:, 0:2], yaw.unsqueeze(-1)], dim=-1)
 
 
 def base_twist(env: ManagerBasedEnv, asset_name: str = "robot") -> torch.Tensor:

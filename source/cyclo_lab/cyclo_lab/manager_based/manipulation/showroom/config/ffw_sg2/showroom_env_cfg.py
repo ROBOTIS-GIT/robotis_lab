@@ -198,7 +198,6 @@ class ObservationsCfg:
             func=mdp.joint_pos_target_name,
             params={"joint_names": FFW_SG2_PUBLISHED_JOINT_NAMES, "asset_name": "robot"},
         )
-        base_pose = ObsTerm(func=mdp.base_pose, params={"asset_name": "robot"})
         base_twist = ObsTerm(func=mdp.base_twist, params={"asset_name": "robot"})
         timestamp = ObsTerm(func=mdp.wall_time)
 
