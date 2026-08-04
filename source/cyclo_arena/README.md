@@ -18,9 +18,27 @@ For a one-command inference run, select `robot`, `scene`, and a downloaded check
 ./scripts/arena/run.sh
 ```
 
-The host command detects `Gr00tN1d6` or `Gr00tN1d7`, builds the pinned matching GR00T runtime when
-needed, and prepares a checkpoint-specific server. The container command validates the FFW-SG2
-processor schema, reads its temporal and action horizons, and launches simulation.
+The host command accepts `Gr00tN1d7`, builds the pinned GR00T N1.7 runtime when needed, and
+prepares a checkpoint-specific server. Both sides use Arena's native remote-policy
+stack: `ActionChunkingClientSidePolicy`, `ActionProtocol`, `PolicyClient`, `PolicyServer`, and
+`remote_policy_server_runner`. Cyclo only supplies the robot-specific observation/action adapter
+needed to connect an FFW-SG2 checkpoint to that generic Arena contract.
+
+This boundary is deliberate. Updating the Arena submodule immediately updates the policy runner,
+remote transport, chunk scheduler, environment builder, evaluation, teleoperation, recording,
+Mimic, and replay entry points used by Cyclo. Robot-specific code stays below
+`cyclo_arena/policies/adapters/`; adding BG2, SH5, or OMY does not require another RPC client or a
+fork of Arena's inference code.
+
+Update the configured Arena compatibility branch and restart the selected server with:
+
+```bash
+git submodule update --remote third_party/IsaacLab-Arena
+./docker/container.sh start-groot
+```
+
+The launcher records the mounted Arena revision and recreates the disposable model-server
+container when that revision changes. Checkpoint data remains in `docker/workspace/model`.
 
 Use the component catalogs to inspect the available composition surface:
 

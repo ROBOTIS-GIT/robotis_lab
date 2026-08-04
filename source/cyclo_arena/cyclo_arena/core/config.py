@@ -40,21 +40,15 @@ def _named_mapping(value: Any, label: str) -> Mapping[str, Any]:
     return _mapping(value, label)
 
 
-def _reject_unknown_keys(
-    values: Mapping[str, Any], allowed: set[str], label: str
-) -> None:
+def _reject_unknown_keys(values: Mapping[str, Any], allowed: set[str], label: str) -> None:
     unknown = set(values) - allowed
     assert not unknown, f"Unknown {label} keys: {sorted(unknown)}"
 
 
-def _optional_float_tuple(
-    value: Any, length: int, label: str
-) -> tuple[float, ...] | None:
+def _optional_float_tuple(value: Any, length: int, label: str) -> tuple[float, ...] | None:
     if value is None:
         return None
-    assert isinstance(value, (list, tuple)) and len(value) == length, (
-        f"{label} must contain {length} numbers"
-    )
+    assert isinstance(value, (list, tuple)) and len(value) == length, f"{label} must contain {length} numbers"
     return tuple(float(item) for item in value)
 
 
@@ -132,13 +126,11 @@ class RunConfig:
     source_path: Path | None = field(default=None, repr=False, compare=False)
 
     def __post_init__(self) -> None:
-        assert self.schema_version == CONFIG_SCHEMA_VERSION, (
-            f"Unsupported Cyclo Arena config schema {self.schema_version}; "
-            f"expected {CONFIG_SCHEMA_VERSION}"
-        )
+        assert (
+            self.schema_version == CONFIG_SCHEMA_VERSION
+        ), f"Unsupported Cyclo Arena config schema {self.schema_version}; expected {CONFIG_SCHEMA_VERSION}"
         assert not (
-            self.runtime.num_steps is not None
-            and self.runtime.num_episodes is not None
+            self.runtime.num_steps is not None and self.runtime.num_episodes is not None
         ), "runtime.num_steps and runtime.num_episodes are mutually exclusive"
         assert self.runtime.num_envs > 0, "runtime.num_envs must be positive"
 
@@ -158,10 +150,9 @@ class RunConfig:
             },
             "top-level",
         )
-        assert not ("model" in values and "policy" in values), (
-            "model and policy are mutually exclusive; a checkpoint model "
-            "selects its policy"
-        )
+        assert not (
+            "model" in values and "policy" in values
+        ), "model and policy are mutually exclusive; a checkpoint model selects its policy"
         robot = _named_mapping(values.get("robot"), "robot")
         scene = _named_mapping(values.get("scene"), "scene")
         task = _mapping(values.get("task", {}), "task")
@@ -221,14 +212,8 @@ class RunConfig:
                 name=str(robot["name"]),
                 embodiment=robot.get("embodiment"),
                 initial_pose=robot.get("initial_pose"),
-                head_position=_optional_float_tuple(
-                    robot.get("head_position"), 2, "robot.head_position"
-                ),
-                lift_position=(
-                    float(robot["lift_position"])
-                    if robot.get("lift_position") is not None
-                    else None
-                ),
+                head_position=_optional_float_tuple(robot.get("head_position"), 2, "robot.head_position"),
+                lift_position=(float(robot["lift_position"]) if robot.get("lift_position") is not None else None),
             ),
             scene=SceneRunConfig(
                 name=str(scene["name"]),
@@ -237,37 +222,19 @@ class RunConfig:
                     3,
                     "scene.robot_position_xyz",
                 ),
-                robot_yaw=(
-                    float(scene["robot_yaw"])
-                    if scene.get("robot_yaw") is not None
-                    else None
-                ),
+                robot_yaw=(float(scene["robot_yaw"]) if scene.get("robot_yaw") is not None else None),
                 options=dict(scene_options),
             ),
             task=TaskRunConfig(
                 name=str(task.get("name", "scene_only")),
-                description=(
-                    str(task["description"]).strip()
-                    if task.get("description") is not None
-                    else None
-                ),
+                description=(str(task["description"]).strip() if task.get("description") is not None else None),
             ),
             policy=PolicyRunConfig(
                 type=str(policy.get("type", "zero_action")),
-                remote_host=(
-                    str(policy["remote_host"]).strip()
-                    if policy.get("remote_host") is not None
-                    else None
-                ),
-                remote_port=(
-                    int(policy["remote_port"])
-                    if policy.get("remote_port") is not None
-                    else None
-                ),
+                remote_host=(str(policy["remote_host"]).strip() if policy.get("remote_host") is not None else None),
+                remote_port=(int(policy["remote_port"]) if policy.get("remote_port") is not None else None),
                 remote_timeout_ms=(
-                    int(policy["remote_timeout_ms"])
-                    if policy.get("remote_timeout_ms") is not None
-                    else None
+                    int(policy["remote_timeout_ms"]) if policy.get("remote_timeout_ms") is not None else None
                 ),
             ),
             model=(
@@ -279,28 +246,12 @@ class RunConfig:
                 else None
             ),
             runtime=RuntimeRunConfig(
-                num_steps=(
-                    int(runtime["num_steps"])
-                    if runtime.get("num_steps") is not None
-                    else None
-                ),
-                num_episodes=(
-                    int(runtime["num_episodes"])
-                    if runtime.get("num_episodes") is not None
-                    else None
-                ),
+                num_steps=(int(runtime["num_steps"]) if runtime.get("num_steps") is not None else None),
+                num_episodes=(int(runtime["num_episodes"]) if runtime.get("num_episodes") is not None else None),
                 num_envs=int(runtime.get("num_envs", 1)),
                 device=runtime.get("device"),
-                seed=(
-                    int(runtime["seed"])
-                    if runtime.get("seed") is not None
-                    else None
-                ),
-                enable_cameras=(
-                    bool(runtime["enable_cameras"])
-                    if runtime.get("enable_cameras") is not None
-                    else None
-                ),
+                seed=(int(runtime["seed"]) if runtime.get("seed") is not None else None),
+                enable_cameras=(bool(runtime["enable_cameras"]) if runtime.get("enable_cameras") is not None else None),
                 headless=bool(runtime.get("headless", False)),
             ),
         )
@@ -316,9 +267,7 @@ class RunConfig:
             robot=self.robot.name,
             adapter_name=self.model.adapter,
             registry=registry,
-            base_directory=(
-                self.source_path.parent if self.source_path is not None else None
-            ),
+            base_directory=(self.source_path.parent if self.source_path is not None else None),
         )
 
     def to_run_values(
@@ -327,15 +276,9 @@ class RunConfig:
         model_adapter_override: str | None = None,
     ) -> dict[str, Any]:
         """Validate registry compatibility and return CLI-shaped run values."""
-        assert self.robot.name in registry.robots, (
-            f"Unknown Cyclo Arena robot: {self.robot.name!r}"
-        )
-        assert self.scene.name in registry.scenes, (
-            f"Unknown Cyclo Arena scene: {self.scene.name!r}"
-        )
-        assert self.task.name in registry.tasks, (
-            f"Unknown Cyclo Arena task: {self.task.name!r}"
-        )
+        assert self.robot.name in registry.robots, f"Unknown Cyclo Arena robot: {self.robot.name!r}"
+        assert self.scene.name in registry.scenes, f"Unknown Cyclo Arena scene: {self.scene.name!r}"
+        assert self.task.name in registry.tasks, f"Unknown Cyclo Arena task: {self.task.name!r}"
         model = None
         model_adapter = None
         if self.model is not None:
@@ -343,26 +286,20 @@ class RunConfig:
                 model = self.resolve_model(registry)
                 model_adapter = model.adapter
             else:
-                assert model_adapter_override in registry.model_adapters, (
-                    f"Unknown Cyclo Arena model adapter: {model_adapter_override!r}"
-                )
+                assert (
+                    model_adapter_override in registry.model_adapters
+                ), f"Unknown Cyclo Arena model adapter: {model_adapter_override!r}"
                 model_adapter = registry.model_adapters[model_adapter_override]
-            assert model_adapter.robot == self.robot.name, (
-                f"Adapter {model_adapter.name!r} requires robot "
-                f"{model_adapter.robot!r}, not "
-                f"{self.robot.name!r}"
-            )
+            assert (
+                model_adapter.robot == self.robot.name
+            ), f"Adapter {model_adapter.name!r} requires robot {model_adapter.robot!r}, not {self.robot.name!r}"
         prepared_remote_port = None
         if model is not None:
             from cyclo_arena.core.server_state import load_server_port
 
             prepared_remote_port = load_server_port(model)
-        policy_name = (
-            model_adapter.policy if model_adapter is not None else self.policy.type
-        )
-        assert policy_name in registry.policies, (
-            f"Unknown Cyclo Arena policy: {policy_name!r}"
-        )
+        policy_name = model_adapter.policy if model_adapter is not None else self.policy.type
+        assert policy_name in registry.policies, f"Unknown Cyclo Arena policy: {policy_name!r}"
         registry.compose(
             robot=self.robot.name,
             scene=self.scene.name,
@@ -374,9 +311,9 @@ class RunConfig:
             or (model_adapter.embodiment if model_adapter is not None else None)
             or robot_spec.default_embodiment
         )
-        assert embodiment in robot_spec.embodiments, (
-            f"Embodiment {embodiment!r} is not valid for robot {robot_spec.name!r}"
-        )
+        assert (
+            embodiment in robot_spec.embodiments
+        ), f"Embodiment {embodiment!r} is not valid for robot {robot_spec.name!r}"
         policy = registry.policies[policy_name]
         missing_capabilities = policy.required_capabilities - robot_spec.capabilities
         assert not missing_capabilities, (
@@ -386,41 +323,21 @@ class RunConfig:
         enable_cameras = (
             self.runtime.enable_cameras
             if self.runtime.enable_cameras is not None
-            else (
-                model_adapter.enable_cameras
-                if model_adapter is not None
-                else False
-            )
+            else (model_adapter.enable_cameras if model_adapter is not None else False)
         )
         if Capability.HEAD_CAMERA in policy.required_capabilities:
-            assert enable_cameras, (
-                f"Policy {policy.name!r} requires runtime.enable_cameras=true"
-            )
+            assert enable_cameras, f"Policy {policy.name!r} requires runtime.enable_cameras=true"
         values = {
-            "model_checkpoint": (
-                str(model.checkpoint)
-                if model is not None
-                else (self.model.checkpoint if self.model is not None else None)
-            ),
-            "model_adapter": (
-                model_adapter.name if model_adapter is not None else None
-            ),
             "robot": self.robot.name,
             "scene": self.scene.name,
             "task": self.task.name,
             "embodiment": embodiment,
             "policy_type": policy.runtime_target or policy.name,
             "task_description": self.task.description,
-            "remote_host": (
-                "127.0.0.1"
-                if model_adapter is not None
-                else self.policy.remote_host
-            ),
+            "remote_host": "127.0.0.1" if model_adapter is not None else self.policy.remote_host,
             "remote_port": self.policy.remote_port or prepared_remote_port,
             "remote_timeout_ms": (
-                model_adapter.remote_timeout_ms
-                if model_adapter is not None
-                else self.policy.remote_timeout_ms
+                model_adapter.remote_timeout_ms if model_adapter is not None else self.policy.remote_timeout_ms
             ),
             "robot_pose": self.robot.initial_pose,
             "robot_position_xyz": self.scene.robot_position_xyz,

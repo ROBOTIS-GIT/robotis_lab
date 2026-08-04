@@ -32,13 +32,14 @@ from cyclo_arena.core.contracts import (
 )
 from cyclo_arena.core.registry import CycloArenaRegistry
 
-FFW_SG2_EMBODIMENTS = ("ffw_sg2_abs_joint_pos",)
+FFW_SG2_EMBODIMENTS = (
+    "ffw_sg2_abs_joint_pos",
+    "ffw_sg2_mobile_abs_joint_pos",
+)
 _SCENE_REGISTRATION_MODULES = ("cyclo_arena.assets.backgrounds",)
 
 
-def _placement(
-    position_xyz: tuple[float, float, float], yaw: float
-) -> dict[str, RobotPlacementSpec]:
+def _placement(position_xyz: tuple[float, float, float], yaw: float) -> dict[str, RobotPlacementSpec]:
     """Create the current FFW-SG2 placement map for one scene."""
     return {"ffw_sg2": RobotPlacementSpec(position_xyz=position_xyz, yaw=yaw)}
 
@@ -52,19 +53,15 @@ def _build_registry() -> CycloArenaRegistry:
             description="ROBOTIS FFW-SG2 dual-arm mobile manipulator.",
             embodiments=FFW_SG2_EMBODIMENTS,
             default_embodiment="ffw_sg2_abs_joint_pos",
-            runtime_adapter=(
-                "cyclo_arena.robots.ffw_sg2.runtime:FFWSG2RuntimeAdapter"
-            ),
-            capabilities=frozenset(
-                {
-                    Capability.ABSOLUTE_JOINT_POSITION,
-                    Capability.DUAL_ARM,
-                    Capability.HEAD_CAMERA,
-                    Capability.WRIST_CAMERAS,
-                    Capability.GR00T_REMOTE,
-                    Capability.SCENE_ONLY,
-                }
-            ),
+            runtime_adapter="cyclo_arena.robots.ffw_sg2.runtime:FFWSG2RuntimeAdapter",
+            capabilities=frozenset({
+                Capability.ABSOLUTE_JOINT_POSITION,
+                Capability.DUAL_ARM,
+                Capability.HEAD_CAMERA,
+                Capability.WRIST_CAMERAS,
+                Capability.GR00T_REMOTE,
+                Capability.SCENE_ONLY,
+            }),
         )
     )
 
@@ -82,6 +79,15 @@ def _build_registry() -> CycloArenaRegistry:
             background_name="cyclo_robotis_showroom",
             placements=_placement((-1.316, 1.681, 0.0), math.pi),
             registration_modules=_SCENE_REGISTRATION_MODULES,
+            add_ground_plane=True,
+        ),
+        SceneSpec(
+            name="robotis_showroom_training",
+            description="ROBOTIS showroom layout used for FFW-SG2 training.",
+            background_name="cyclo_robotis_showroom_training",
+            placements=_placement((-1.316, 1.681, 0.0), math.pi),
+            registration_modules=_SCENE_REGISTRATION_MODULES,
+            additional_assets_factory="cyclo_arena.assets.backgrounds:make_robotis_showroom_training_objects",
             add_ground_plane=True,
         ),
         SceneSpec(
@@ -194,39 +200,14 @@ def _build_registry() -> CycloArenaRegistry:
         ),
         PolicySpec(
             name="gr00t_closedloop",
-            description="Cyclo GR00T N1.6/N1.7 closed-loop remote policy.",
-            runtime_target=(
-                "cyclo_arena.policies.gr00t_ffw_sg2."
-                "Gr00tFFWSG2RemotePolicy"
-            ),
-            required_capabilities=frozenset(
-                {Capability.HEAD_CAMERA, Capability.GR00T_REMOTE}
-            ),
+            description="Arena-native GR00T N1.7 remote chunking policy.",
+            runtime_target="isaaclab_arena.policy.action_chunking_client.ActionChunkingClientSidePolicy",
+            required_capabilities=frozenset({Capability.HEAD_CAMERA, Capability.GR00T_REMOTE}),
         ),
     )
     for policy in policies:
         registry.register_policy(policy)
 
-    registry.register_model_adapter(
-        ModelAdapterSpec(
-            name="ffw_sg2_gr00t_n16",
-            description="GR00T N1.6 new_embodiment interface for FFW-SG2.",
-            robot="ffw_sg2",
-            policy="gr00t_closedloop",
-            embodiment="ffw_sg2_abs_joint_pos",
-            model_types=("Gr00tN1d6",),
-            processor_embodiment="new_embodiment",
-            modality_keys={
-                "video": ("cam_left_head",),
-                "state": ("arm_left", "arm_right"),
-                "action": ("arm_left", "arm_right"),
-                "language": ("annotation.human.task_description",),
-            },
-            action_horizon=16,
-            server_image="cyclo-gr00t:n1.6",
-            server_source_revision="e29d8fc50b0e4745120ae3fb72447986fe638aa6",
-        )
-    )
     registry.register_model_adapter(
         ModelAdapterSpec(
             name="ffw_sg2_gr00t_n17",
@@ -243,6 +224,36 @@ def _build_registry() -> CycloArenaRegistry:
                 "language": ("annotation.human.task_description",),
             },
             action_horizon=40,
+            server_robot_adapter="cyclo_arena.policies.adapters.ffw_sg2:FFWSG2Gr00tAdapter",
+            server_image="cyclo-gr00t:n1.7",
+            server_source_revision="23ace64f17aa5015259b8609d371eb61a357c776",
+            server_workdir="/workspace",
+            startup_timeout_seconds=600,
+        )
+    )
+    registry.register_model_adapter(
+        ModelAdapterSpec(
+            name="ffw_sg2_gr00t_n17_showroom",
+            description="GR00T N1.7 three-camera mobile interface for FFW-SG2 showroom.",
+            robot="ffw_sg2",
+            policy="gr00t_closedloop",
+            embodiment="ffw_sg2_mobile_abs_joint_pos",
+            model_types=("Gr00tN1d7",),
+            processor_embodiment="new_embodiment",
+            modality_keys={
+                "video": (
+                    "cam_left_head",
+                    "cam_left_wrist",
+                    "cam_right_wrist",
+                ),
+                "state": ("arm_left", "arm_right", "odometry"),
+                "action": ("arm_left", "arm_right", "odometry"),
+                "language": ("annotation.human.task_description",),
+            },
+            action_horizon=16,
+            server_robot_adapter="cyclo_arena.policies.adapters.ffw_sg2:FFWSG2ShowroomGr00tAdapter",
+            action_repeat=3,
+            action_chunk_length=48,
             server_image="cyclo-gr00t:n1.7",
             server_source_revision="23ace64f17aa5015259b8609d371eb61a357c776",
             server_workdir="/workspace",

@@ -24,10 +24,16 @@ from cyclo_arena.catalog import FFW_SG2_EMBODIMENTS, REGISTRY
 class CatalogTest(unittest.TestCase):
     """Verify the FFW-SG2 environment and workflow surface."""
 
-    def test_ffw_sg2_has_one_pose_independent_embodiment(self):
+    def test_ffw_sg2_has_pose_independent_embodiments(self):
         robot = REGISTRY.robots["ffw_sg2"]
 
-        self.assertEqual(FFW_SG2_EMBODIMENTS, ("ffw_sg2_abs_joint_pos",))
+        self.assertEqual(
+            FFW_SG2_EMBODIMENTS,
+            (
+                "ffw_sg2_abs_joint_pos",
+                "ffw_sg2_mobile_abs_joint_pos",
+            ),
+        )
         self.assertEqual(robot.embodiments, FFW_SG2_EMBODIMENTS)
         self.assertEqual(robot.default_embodiment, "ffw_sg2_abs_joint_pos")
 
@@ -59,21 +65,37 @@ class CatalogTest(unittest.TestCase):
 
     def test_components_are_registered_separately(self):
         self.assertEqual(set(REGISTRY.robots), {"ffw_sg2"})
-        self.assertEqual(len(REGISTRY.scenes), 11)
+        self.assertEqual(len(REGISTRY.scenes), 12)
         self.assertEqual(set(REGISTRY.tasks), {"scene_only"})
 
     def test_ffw_sg2_gr00t_adapter_is_registered_without_models(self):
         self.assertEqual(
             set(REGISTRY.model_adapters),
-            {"ffw_sg2_gr00t_n16", "ffw_sg2_gr00t_n17"},
+            {
+                "ffw_sg2_gr00t_n17",
+                "ffw_sg2_gr00t_n17_showroom",
+            },
         )
-        n16_adapter = REGISTRY.model_adapters["ffw_sg2_gr00t_n16"]
         n17_adapter = REGISTRY.model_adapters["ffw_sg2_gr00t_n17"]
-        self.assertEqual(n16_adapter.robot, "ffw_sg2")
-        self.assertEqual(n16_adapter.model_types, ("Gr00tN1d6",))
+        showroom_adapter = REGISTRY.model_adapters["ffw_sg2_gr00t_n17_showroom"]
         self.assertEqual(n17_adapter.robot, "ffw_sg2")
         self.assertEqual(n17_adapter.model_types, ("Gr00tN1d7",))
-        self.assertNotEqual(n16_adapter.server_image, n17_adapter.server_image)
+        self.assertEqual(n17_adapter.server_image, "cyclo-gr00t:n1.7")
+        self.assertEqual(
+            showroom_adapter.embodiment,
+            "ffw_sg2_mobile_abs_joint_pos",
+        )
+        self.assertEqual(showroom_adapter.action_horizon, 16)
+        self.assertEqual(showroom_adapter.action_repeat, 3)
+        self.assertEqual(showroom_adapter.action_chunk_length, 48)
+
+    def test_gr00t_client_is_the_upstream_arena_policy(self):
+        policy = REGISTRY.policies["gr00t_closedloop"]
+
+        self.assertEqual(
+            policy.runtime_target,
+            "isaaclab_arena.policy.action_chunking_client.ActionChunkingClientSidePolicy",
+        )
 
 
 if __name__ == "__main__":

@@ -28,13 +28,15 @@ robot:
   name: ffw_sg2
 
   # Optional Arena embodiment override. Omit it to use the robot/model default.
-  # Available now: ffw_sg2_abs_joint_pos
+  # Available now:
+  #   ffw_sg2_abs_joint_pos         - 19 joint-position actions
+  #   ffw_sg2_mobile_abs_joint_pos  - 19 joint + [vx, vy, wz] actions
   # embodiment: ffw_sg2_abs_joint_pos
 
   # A named joint pose stored under configs/robots/<robot>/poses. It is separate
   # from the checkpoint so downloading a model never requires Python changes.
-  # Available now: recycling, cartoning
-  initial_pose: recycling
+  # Available now: recycling, cartoning, showroom
+  initial_pose: showroom
 
   # Optional joint overrides applied after `initial_pose`.
   # head_position order: [head_joint1, head_joint2], unit: radians.
@@ -49,6 +51,7 @@ robot:
 #
 #   galileo                         - Galileo warehouse
 #   robotis_showroom                - local ROBOTIS showroom
+#   robotis_showroom_training       - model-training showroom + products
 #   simple_warehouse                - Isaac Sim warehouse
 #   kitchen                         - Arena kitchen
 #   kitchen_with_open_drawer        - Arena kitchen with an open drawer
@@ -59,7 +62,7 @@ robot:
 #   maple_table_robolab             - Robolab maple table
 #   table_oak_robolab               - Robolab oak table
 scene:
-  name: robotis_showroom
+  name: robotis_showroom_training
 
   # Optional robot base-pose overrides. Omit either value to use the selected
   # scene's FFW-SG2 placement registered in catalog.py.
@@ -92,29 +95,27 @@ scene:
 #
 # `adapter: auto` reads config.json and processor_config.json from the checkpoint,
 # then verifies its camera/state/action/language schema against the selected robot.
-# `Gr00tN1d6` selects the pinned N1.6 runtime and `Gr00tN1d7` selects the pinned
-# N1.7 runtime. `./docker/container.sh start-groot` builds only the selected image.
+# `Gr00tN1d7` selects the pinned N1.7 runtime. Other model types are rejected
+# before Docker startup. `./docker/container.sh start-groot` builds that image.
 # No catalog.py edit is needed when another compatible checkpoint is downloaded.
+# Inference transport and action chunk scheduling use the checked-out Arena
+# ActionChunkingClientSidePolicy/PolicyServer implementation directly. Cyclo only
+# selects the robot data adapter required by the checkpoint schema.
 #
-# Recycling example:
-#   checkpoint: ${CYCLO_ARENA_MODEL_ROOT}/GR00T-N1.6_SeparateRecycling_model
-#   robot.initial_pose: recycling
-#
-# Cartoning example:
-#   checkpoint: ${CYCLO_ARENA_MODEL_ROOT}/GR00T-N1.6_CartoningFoodProduct_model
-#   robot.initial_pose: cartoning
-#
-# N1.7 example:
-#   checkpoint: ${CYCLO_ARENA_MODEL_ROOT}/FFW-SG2-GR00T-N1.7
+# N1.7 showroom example:
+#   checkpoint: ${CYCLO_ARENA_MODEL_ROOT}/showroom_groot
+#   robot.initial_pose: showroom
 #
 # The generic NVIDIA N1.7 base checkpoint does not contain the FFW-SG2
-# `new_embodiment` schema. Use an N1.7 checkpoint fine-tuned with the same
-# cam_left_head/arm_left/arm_right observation and action keys.
+# `new_embodiment` schema. Cyclo Arena currently auto-detects both the
+# single-head-camera joint-only schema and the three-camera showroom schema
+# with arm_left/arm_right/odometry state and action keys.
 model:
-  checkpoint: ${CYCLO_ARENA_MODEL_ROOT}/GR00T-N1.6_SeparateRecycling_model
+  checkpoint: ${CYCLO_ARENA_MODEL_ROOT}/showroom_groot
 
   # `auto` is recommended. Explicit values are useful only for debugging:
-  #   ffw_sg2_gr00t_n16, ffw_sg2_gr00t_n17
+  #   ffw_sg2_gr00t_n17
+  #   ffw_sg2_gr00t_n17_showroom
   adapter: auto
 
 # Alternative direct-policy mode
@@ -136,9 +137,8 @@ model:
 # yet. `description` is still sent to the selected GR00T model as its instruction.
 task:
   name: scene_only
-  description: >
-    Grasp the trash and drop it into the left trash bin, then grasp the plate
-    and put it into the right blue bin.
+  # Exact language label used by Dongkkka/showroom_groot during training.
+  description: Cyclo-Real-Showroom-FFW-SG2-v0
 
 # Simulation runtime
 # ------------------

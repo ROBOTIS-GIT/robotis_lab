@@ -53,14 +53,12 @@ class RunConfigTest(unittest.TestCase):
     """Verify strict config parsing and registry validation."""
 
     def test_zero_action_config_maps_to_run_contract(self):
-        config = RunConfig.from_mapping(
-            {
-                "robot": "ffw_sg2",
-                "scene": "galileo",
-                "policy": {"type": "zero_action"},
-                "runtime": {"num_steps": 1800, "enable_cameras": True},
-            }
-        )
+        config = RunConfig.from_mapping({
+            "robot": "ffw_sg2",
+            "scene": "galileo",
+            "policy": {"type": "zero_action"},
+            "runtime": {"num_steps": 1800, "enable_cameras": True},
+        })
         values = config.to_run_values(REGISTRY)
 
         self.assertEqual(values["robot"], "ffw_sg2")
@@ -73,41 +71,32 @@ class RunConfigTest(unittest.TestCase):
 
     def test_unknown_config_keys_are_rejected(self):
         with self.assertRaisesRegex(AssertionError, "Unknown robot keys"):
-            RunConfig.from_mapping(
-                {
-                    "robot": {"name": "ffw_sg2", "unsupported": True},
-                    "scene": {"name": "galileo"},
-                }
-            )
+            RunConfig.from_mapping({
+                "robot": {"name": "ffw_sg2", "unsupported": True},
+                "scene": {"name": "galileo"},
+            })
 
     def test_default_run_selects_robot_scene_and_model(self):
-        config_path = (
-            Path(__file__).resolve().parents[1] / "configs" / "run.yaml"
-        )
+        config_path = Path(__file__).resolve().parents[1] / "configs" / "run.yaml"
 
         config = load_run_config(config_path)
         values = config.to_run_values(
             REGISTRY,
-            model_adapter_override="ffw_sg2_gr00t_n16",
+            model_adapter_override="ffw_sg2_gr00t_n17_showroom",
         )
 
-        self.assertTrue(
-            values["model_checkpoint"].endswith(
-                "GR00T-N1.6_SeparateRecycling_model"
-            )
-        )
-        self.assertEqual(values["model_adapter"], "ffw_sg2_gr00t_n16")
         self.assertEqual(values["robot"], "ffw_sg2")
         self.assertEqual(values["scene"], config.scene.name)
-        self.assertEqual(values["embodiment"], "ffw_sg2_abs_joint_pos")
-        self.assertEqual(values["robot_pose"], "recycling")
+        self.assertEqual(
+            values["embodiment"],
+            "ffw_sg2_mobile_abs_joint_pos",
+        )
+        self.assertEqual(values["robot_pose"], "showroom")
         self.assertIsNone(values["remote_port"])
         self.assertTrue(values["enable_cameras"])
 
     def test_selected_model_composes_with_every_ffw_sg2_scene(self):
-        config_path = (
-            Path(__file__).resolve().parents[1] / "configs" / "run.yaml"
-        )
+        config_path = Path(__file__).resolve().parents[1] / "configs" / "run.yaml"
         config = load_run_config(config_path)
 
         for scene_name in REGISTRY.scenes:
@@ -115,15 +104,13 @@ class RunConfigTest(unittest.TestCase):
                 scene_config = replace(config.scene, name=scene_name)
                 values = replace(config, scene=scene_config).to_run_values(
                     REGISTRY,
-                    model_adapter_override="ffw_sg2_gr00t_n16",
+                    model_adapter_override="ffw_sg2_gr00t_n17_showroom",
                 )
                 self.assertEqual(values["robot"], "ffw_sg2")
                 self.assertEqual(values["scene"], scene_name)
 
     def test_default_run_documents_every_registered_selection(self):
-        config_path = (
-            Path(__file__).resolve().parents[1] / "configs" / "run.yaml"
-        )
+        config_path = Path(__file__).resolve().parents[1] / "configs" / "run.yaml"
         documentation = config_path.read_text(encoding="utf-8")
 
         for selection in (
@@ -134,9 +121,7 @@ class RunConfigTest(unittest.TestCase):
                 self.assertIn(selection, documentation)
 
     def test_default_run_documents_every_supported_config_field(self):
-        config_path = (
-            Path(__file__).resolve().parents[1] / "configs" / "run.yaml"
-        )
+        config_path = Path(__file__).resolve().parents[1] / "configs" / "run.yaml"
         documentation = config_path.read_text(encoding="utf-8")
         supported_fields = (
             "schema_version",
@@ -178,14 +163,12 @@ class RunConfigTest(unittest.TestCase):
 
     def test_model_and_policy_cannot_be_selected_together(self):
         with self.assertRaisesRegex(AssertionError, "mutually exclusive"):
-            RunConfig.from_mapping(
-                {
-                    "robot": "ffw_sg2",
-                    "scene": "robotis_showroom",
-                    "model": "/models/downloaded_checkpoint",
-                    "policy": {"type": "zero_action"},
-                }
-            )
+            RunConfig.from_mapping({
+                "robot": "ffw_sg2",
+                "scene": "robotis_showroom",
+                "model": "/models/downloaded_checkpoint",
+                "policy": {"type": "zero_action"},
+            })
 
 
 if __name__ == "__main__":

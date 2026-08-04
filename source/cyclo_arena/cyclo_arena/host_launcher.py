@@ -39,6 +39,9 @@ from cyclo_arena.core.server_state import write_server_state
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 CONTAINER_REPOSITORY_ROOT = Path("/workspace/cyclo_lab")
 SERVER_CHECKPOINT_PATH = "/models/checkpoint"
+SERVER_CYCLO_ARENA_ROOT = "/opt/cyclo_arena"
+SERVER_ISAACLAB_ARENA_ROOT = "/opt/isaaclab_arena"
+SERVER_PROTOCOL_VERSION = "arena-remote-policy-v1"
 
 
 def _run(
@@ -89,21 +92,42 @@ def _container_label(container_name: str, label: str) -> str | None:
     return value if value and value != "<no value>" else None
 
 
+def _arena_revision() -> str:
+    """Return the Arena checkout revision mounted into model servers."""
+    arena_root = REPOSITORY_ROOT / "third_party" / "IsaacLab-Arena"
+    result = _run(
+        ["git", "-C", str(arena_root), "rev-parse", "HEAD"],
+        check=False,
+        capture_output=True,
+    )
+    assert result.returncode == 0, f"Isaac Lab Arena submodule is unavailable: {arena_root}"
+    return result.stdout.strip()
+
+
+def _cyclo_arena_fingerprint() -> str:
+    """Return a digest of the Cyclo Arena Python mounted into model servers."""
+    source_root = REPOSITORY_ROOT / "source" / "cyclo_arena" / "cyclo_arena"
+    digest = hashlib.sha256()
+    for source_path in sorted(source_root.rglob("*.py")):
+        digest.update(source_path.relative_to(source_root).as_posix().encode())
+        digest.update(source_path.read_bytes())
+    return digest.hexdigest()
+
+
 def _ensure_cyclo_container(container_name: str) -> None:
     """Start the Cyclo Lab container when necessary."""
     if _container_status(container_name) == "running":
         return
     print(f"[INFO] Starting Cyclo Lab container: {container_name}", flush=True)
     _run([str(REPOSITORY_ROOT / "docker" / "container.sh"), "start"])
-    assert _container_status(container_name) == "running", (
-        f"Cyclo Lab container did not start: {container_name}"
-    )
+    assert _container_status(container_name) == "running", f"Cyclo Lab container did not start: {container_name}"
 
 
 def _server_container_name(model: ResolvedModel) -> str:
     """Return a deterministic Docker name for one checkpoint path."""
     slug = re.sub(r"[^a-z0-9]+", "-", model.name.lower()).strip("-")
-    digest = hashlib.sha256(str(model.checkpoint).encode()).hexdigest()[:10]
+    identity = f"{model.checkpoint}|{SERVER_PROTOCOL_VERSION}"
+    digest = hashlib.sha256(identity.encode()).hexdigest()[:10]
     return f"cyclo-gr00t-{slug[:38]}-{digest}"
 
 
@@ -135,6 +159,9 @@ def _stop_inactive_model_servers(active_container: str) -> None:
 
 def _huggingface_root(checkpoint: Path) -> Path:
     """Return a cache root to expose alongside the exact checkpoint mount."""
+    default_cache = Path(os.environ.get("HF_HOME", Path.home() / ".cache" / "huggingface")).expanduser()
+    if (default_cache / "token").is_file():
+        return default_cache
     if checkpoint.parent.name == "checkpoints":
         return checkpoint.parent.parent
     search_root = model_search_root()
@@ -162,64 +189,88 @@ def _create_server_container(
     )
     server_program = (
         ".venv/bin/python",
-        "gr00t/eval/run_gr00t_server.py",
-        "--model-path",
+        "-m",
+        "isaaclab_arena.remote_policy.remote_policy_server_runner",
+        "--policy_type",
+        "cyclo_arena.policies.gr00t_server.CycloGr00tServerSidePolicy",
+        "--model_path",
         SERVER_CHECKPOINT_PATH,
-        "--embodiment-tag",
+        "--robot_adapter",
+        adapter.server_robot_adapter,
+        "--embodiment_tag",
         adapter.server_embodiment_tag,
         "--device",
         adapter.server_device,
+        "--action_repeat",
+        str(adapter.action_repeat),
+        "--action_chunk_length",
+        str(adapter.action_chunk_length),
         "--host",
         "127.0.0.1",
         "--port",
         str(port),
     )
-    shell_command = (
-        f"cd {shlex.quote(adapter.server_workdir)} "
-        f"&& exec {shlex.join(server_program)}"
-    )
+    shell_command = f"cd {shlex.quote(adapter.server_workdir)} && exec {shlex.join(server_program)}"
     huggingface_root = _huggingface_root(model.checkpoint)
     print(f"[INFO] Creating GR00T server: {container_name}", flush=True)
-    _run(
-        [
-            "docker",
-            "run",
-            "--detach",
-            "--name",
-            container_name,
-            "--gpus",
-            "all",
-            "--ipc",
-            "host",
-            "--network",
-            "host",
-            "--security-opt",
-            "label=disable",
-            "--label",
-            "cyclo_arena.managed=true",
-            "--label",
-            f"cyclo_arena.checkpoint={model.checkpoint}",
-            "--label",
-            f"cyclo_arena.adapter={adapter.name}",
-            "--label",
-            f"cyclo_arena.server_port={port}",
-            "-e",
-            "HF_HOME=/models/huggingface",
-            "-e",
-            "HUGGINGFACE_HUB_CACHE=/models/huggingface/hub",
-            "-v",
-            f"{model.checkpoint}:{SERVER_CHECKPOINT_PATH}:ro",
-            "-v",
-            f"{huggingface_root}:/models/huggingface",
-            adapter.server_image,
-            "bash",
-            "-lc",
-            shell_command,
-        ]
-    )
+    _run([
+        "docker",
+        "run",
+        "--detach",
+        "--name",
+        container_name,
+        "--gpus",
+        "all",
+        "--ipc",
+        "host",
+        "--network",
+        "host",
+        "--security-opt",
+        "label=disable",
+        "--label",
+        "cyclo_arena.managed=true",
+        "--label",
+        f"cyclo_arena.checkpoint={model.checkpoint}",
+        "--label",
+        f"cyclo_arena.adapter={adapter.name}",
+        "--label",
+        f"cyclo_arena.server_port={port}",
+        "--label",
+        f"cyclo_arena.server_protocol={SERVER_PROTOCOL_VERSION}",
+        "--label",
+        f"cyclo_arena.arena_revision={_arena_revision()}",
+        "--label",
+        f"cyclo_arena.source_fingerprint={_cyclo_arena_fingerprint()}",
+        "-e",
+        "HF_HOME=/models/huggingface",
+        "-e",
+        "HUGGINGFACE_HUB_CACHE=/models/huggingface/hub",
+        "-e",
+        f"PYTHONPATH={SERVER_CYCLO_ARENA_ROOT}:{SERVER_ISAACLAB_ARENA_ROOT}",
+        "-v",
+        f"{model.checkpoint}:{SERVER_CHECKPOINT_PATH}:ro",
+        "-v",
+        f"{huggingface_root}:/models/huggingface",
+        "-v",
+        f"{REPOSITORY_ROOT / 'source' / 'cyclo_arena'}:{SERVER_CYCLO_ARENA_ROOT}:ro",
+        "-v",
+        f"{REPOSITORY_ROOT / 'third_party' / 'IsaacLab-Arena'}:{SERVER_ISAACLAB_ARENA_ROOT}:ro",
+        adapter.server_image,
+        "bash",
+        "-lc",
+        shell_command,
+    ])
 
 
 def _ping_server(container_name: str, host: str, port: int) -> bool:
+    probe = (
+        "from isaaclab_arena.remote_policy.policy_client import PolicyClient;"
+        "from isaaclab_arena.remote_policy.remote_policy_config import "
+        "RemotePolicyConfig;"
+        f"c=PolicyClient(RemotePolicyConfig(host={host!r},port={port},"
+        "timeout_ms=1000));"
+        "raise SystemExit(0 if c.ping() else 1)"
+    )
     result = _run(
         [
             "docker",
@@ -228,14 +279,8 @@ def _ping_server(container_name: str, host: str, port: int) -> bool:
             "PYTHONDONTWRITEBYTECODE=1",
             container_name,
             "/isaac-sim/python.sh",
-            "-m",
-            "cyclo_arena.policies.gr00t_rpc",
-            "--host",
-            host,
-            "--port",
-            str(port),
-            "--timeout-ms",
-            "1000",
+            "-c",
+            probe,
         ],
         check=False,
         capture_output=True,
@@ -251,20 +296,33 @@ def _ensure_model_server(
     container_name = _server_container_name(model)
     _stop_inactive_model_servers(container_name)
     status = _container_status(container_name)
+    if status is not None:
+        server_arena_revision = _container_label(container_name, "cyclo_arena.arena_revision")
+        if server_arena_revision != _arena_revision():
+            print(
+                f"[INFO] Recreating GR00T server for the updated Arena checkout: {container_name}",
+                flush=True,
+            )
+            _run(["docker", "rm", "--force", container_name])
+            status = None
+        elif _container_label(container_name, "cyclo_arena.source_fingerprint") != _cyclo_arena_fingerprint():
+            print(
+                f"[INFO] Recreating GR00T server for updated Cyclo Arena code: {container_name}",
+                flush=True,
+            )
+            _run(["docker", "rm", "--force", container_name])
+            status = None
     if status is None:
         port = _available_port()
         _create_server_container(model, container_name, port)
     else:
         port_value = _container_label(container_name, "cyclo_arena.server_port")
-        assert port_value is not None, (
-            f"Existing container {container_name!r} is not a Cyclo-managed model server"
-        )
+        assert port_value is not None, f"Existing container {container_name!r} is not a Cyclo-managed model server"
         port = int(port_value)
         checkpoint = _container_label(container_name, "cyclo_arena.checkpoint")
-        assert checkpoint == str(model.checkpoint), (
-            f"Model server {container_name!r} points to {checkpoint!r}, not "
-            f"{str(model.checkpoint)!r}"
-        )
+        assert checkpoint == str(
+            model.checkpoint
+        ), f"Model server {container_name!r} points to {checkpoint!r}, not {str(model.checkpoint)!r}"
         adapter_name = _container_label(container_name, "cyclo_arena.adapter")
         assert adapter_name == model.adapter.name, (
             f"Model server {container_name!r} uses adapter {adapter_name!r}, not "
@@ -292,18 +350,14 @@ def _ensure_model_server(
                 check=False,
                 capture_output=True,
             )
-            raise RuntimeError(
-                f"GR00T server stopped while loading ({status}).\n"
-                f"{logs.stdout}{logs.stderr}"
-            )
+            raise RuntimeError(f"GR00T server stopped while loading ({status}).\n{logs.stdout}{logs.stderr}")
         if time.monotonic() >= next_update:
             remaining = max(0, int(deadline - time.monotonic()))
             print(f"[INFO] GR00T model is loading ({remaining}s remaining)", flush=True)
             next_update = time.monotonic() + 10.0
         time.sleep(1.0)
     raise TimeoutError(
-        f"GR00T server 127.0.0.1:{port} did not become ready within "
-        f"{model.adapter.startup_timeout_seconds}s"
+        f"GR00T server 127.0.0.1:{port} did not become ready within {model.adapter.startup_timeout_seconds}s"
     )
 
 
@@ -358,10 +412,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     model = config.resolve_model(REGISTRY)
     if args.print_server_runtime:
         assert model is not None, "A GR00T model must be selected in run.yaml"
-        print(
-            f"{model.adapter.server_image}\t"
-            f"{model.adapter.server_source_revision}"
-        )
+        print(f"{model.adapter.server_image}\t{model.adapter.server_source_revision}")
         return 0
 
     assert shutil.which("docker"), "Docker CLI is required on the host"

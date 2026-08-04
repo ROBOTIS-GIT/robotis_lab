@@ -109,29 +109,25 @@ class CliTest(unittest.TestCase):
         self.assertIn("--kitchen_style 7", command)
 
     def test_checkpoint_config_uses_resolved_adapter_and_robot_pose(self):
-        config_path = (
-            Path(__file__).resolve().parents[1] / "configs" / "run.yaml"
-        )
+        config_path = Path(__file__).resolve().parents[1] / "configs" / "run.yaml"
         output = io.StringIO()
         with contextlib.redirect_stdout(output):
-            result = cli.main(
-                [
-                    "run",
-                    "--config",
-                    str(config_path),
-                    "--resolved-model-adapter",
-                    "ffw_sg2_gr00t_n16",
-                    "--remote-port",
-                    "61234",
-                    "--dry-run",
-                ]
-            )
+            result = cli.main([
+                "run",
+                "--config",
+                str(config_path),
+                "--resolved-model-adapter",
+                "ffw_sg2_gr00t_n17_showroom",
+                "--remote-port",
+                "61234",
+                "--dry-run",
+            ])
 
         command = output.getvalue()
         self.assertEqual(result, 0)
         self.assertIn("--remote_port 61234", command)
-        self.assertIn("--embodiment ffw_sg2_abs_joint_pos", command)
-        self.assertIn("--robot_pose recycling", command)
+        self.assertIn("--embodiment ffw_sg2_mobile_abs_joint_pos", command)
+        self.assertIn("--robot_pose showroom", command)
 
     def test_passthrough_preserves_native_arguments(self):
         with mock.patch.object(cli, "_exec_workflow") as execute:
@@ -139,6 +135,7 @@ class CliTest(unittest.TestCase):
 
         self.assertEqual(result, 0)
         execute.assert_called_once_with(cli.PASSTHROUGH_WORKFLOWS["policy"], ["--help"])
+
 
 if __name__ == "__main__":
     unittest.main()

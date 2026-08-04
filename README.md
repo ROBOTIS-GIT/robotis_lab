@@ -97,8 +97,8 @@ Select the robot, scene, checkpoint, and initial pose in
 The launcher composes one generic Arena environment from the selected components; scene-specific
 environment aliases and model-specific Python catalog entries are not required.
 Store Cyclo Arena checkpoints under `docker/workspace/model`; the container exposes the same
-workspace at `/workspace/model`. `start-groot` detects N1.6 or N1.7 from checkpoint metadata,
-builds the matching isolated model server, and prepares it before the container-side simulation
+workspace at `/workspace/model`. `start-groot` validates N1.7 checkpoint metadata,
+builds the pinned model server, and prepares it before the container-side simulation
 connects to it.
 
 Use `cyclo-arena list workflows` to see the upstream policy evaluation, batch evaluation,

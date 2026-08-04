@@ -50,9 +50,7 @@ class ArenaEnvironmentComposer:
             constructor_name: getattr(args_cli, cli_name)
             for constructor_name, cli_name in scene.constructor_arg_names.items()
         }
-        background = self.asset_registry.get_asset_by_name(scene.background_name)(
-            **constructor_args
-        )
+        background = self.asset_registry.get_asset_by_name(scene.background_name)(**constructor_args)
         if scene.background_position_xyz is not None:
             from isaaclab_arena.utils.pose import Pose
 
@@ -93,10 +91,11 @@ class ArenaEnvironmentComposer:
         task = task_class(**task_constructor_args)
 
         scene_assets = [background]
+        if self.plan.scene.additional_assets_factory is not None:
+            additional_assets_factory = import_target(self.plan.scene.additional_assets_factory)
+            scene_assets.extend(additional_assets_factory())
         if self.plan.scene.add_ground_plane:
-            scene_assets.append(
-                self.asset_registry.get_asset_by_name("ground_plane")()
-            )
+            scene_assets.append(self.asset_registry.get_asset_by_name("ground_plane")())
         scene_assets.append(self.asset_registry.get_asset_by_name("light")())
 
         def configure_env(env_cfg: Any) -> Any:

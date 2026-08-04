@@ -47,10 +47,9 @@ class RobotSpec:
     def __post_init__(self) -> None:
         assert self.name, "Robot name must not be empty"
         assert self.embodiments, f"Robot {self.name!r} has no embodiments"
-        assert self.default_embodiment in self.embodiments, (
-            f"Default embodiment {self.default_embodiment!r} is not registered "
-            f"for robot {self.name!r}"
-        )
+        assert (
+            self.default_embodiment in self.embodiments
+        ), f"Default embodiment {self.default_embodiment!r} is not registered for robot {self.name!r}"
 
 
 @dataclass(frozen=True)
@@ -62,6 +61,7 @@ class SceneSpec:
     background_name: str
     placements: Mapping[str, RobotPlacementSpec]
     registration_modules: tuple[str, ...] = ()
+    additional_assets_factory: str | None = None
     add_ground_plane: bool = False
     background_position_xyz: tuple[float, float, float] | None = None
     background_rotation_wxyz: tuple[float, float, float, float] = (
@@ -85,9 +85,7 @@ class SceneSpec:
 
     def placement_for(self, robot_name: str) -> RobotPlacementSpec:
         """Return the configured placement for one robot."""
-        assert robot_name in self.placements, (
-            f"Robot {robot_name!r} has no placement in scene {self.name!r}"
-        )
+        assert robot_name in self.placements, f"Robot {robot_name!r} has no placement in scene {self.name!r}"
         return self.placements[robot_name]
 
 
@@ -132,10 +130,13 @@ class ModelAdapterSpec:
     processor_embodiment: str
     modality_keys: Mapping[str, tuple[str, ...]]
     action_horizon: int
+    server_robot_adapter: str
     action_representation: str = "ABSOLUTE"
-    server_image: str = "cyclo-gr00t:n1.6"
+    action_repeat: int = 2
+    action_chunk_length: int = 32
+    server_image: str = "cyclo-gr00t:n1.7"
     server_source_revision: str = ""
-    server_workdir: str = "/workspace/gr00t"
+    server_workdir: str = "/workspace"
     server_embodiment_tag: str = "NEW_EMBODIMENT"
     server_device: str = "cuda"
     remote_timeout_ms: int = 120000
@@ -145,17 +146,19 @@ class ModelAdapterSpec:
     def __post_init__(self) -> None:
         assert self.name, "Model adapter name must not be empty"
         assert self.model_types, f"Model adapter {self.name!r} has no model types"
-        assert self.processor_embodiment, (
-            f"Model adapter {self.name!r} has no processor embodiment"
-        )
+        assert self.processor_embodiment, f"Model adapter {self.name!r} has no processor embodiment"
         assert self.action_horizon > 0, "Model action horizon must be positive"
+        assert self.server_robot_adapter, f"Model adapter {self.name!r} has no server robot adapter"
+        assert self.action_repeat > 0, "Action repeat must be positive"
+        assert (
+            0 < self.action_chunk_length <= (self.action_horizon * self.action_repeat)
+        ), "Action chunk length must fit in the repeated model horizon"
+        assert (
+            self.action_chunk_length % self.action_repeat == 0
+        ), "Action chunk length must preserve complete repeated model actions"
         assert self.server_image, f"Model adapter {self.name!r} has no server image"
-        assert self.server_source_revision, (
-            f"Model adapter {self.name!r} has no GR00T source revision"
-        )
-        assert self.server_workdir.startswith("/"), (
-            "GR00T server workdir must be an absolute container path"
-        )
+        assert self.server_source_revision, f"Model adapter {self.name!r} has no GR00T source revision"
+        assert self.server_workdir.startswith("/"), "GR00T server workdir must be an absolute container path"
         object.__setattr__(
             self,
             "modality_keys",
@@ -195,8 +198,6 @@ def import_target(target: str) -> Any:
     import importlib
 
     module_name, separator, attribute_name = target.partition(":")
-    assert separator and module_name and attribute_name, (
-        f"Import target must use module:attribute syntax: {target!r}"
-    )
+    assert separator and module_name and attribute_name, f"Import target must use module:attribute syntax: {target!r}"
     module = importlib.import_module(module_name)
     return getattr(module, attribute_name)

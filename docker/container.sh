@@ -21,7 +21,6 @@ tabs 4 2>/dev/null || true
 export CYCLOLAB_PATH="$( cd "$( dirname "${BASH_SOURCE[0]}" )/.." &> /dev/null && pwd )"
 export DOCKER_DIR="${CYCLOLAB_PATH}/docker"
 GROOT_REPOSITORY_URL="https://github.com/NVIDIA/Isaac-GR00T.git"
-GROOT_LEGACY_N16_IMAGE="gr00t-dev-5090"
 CYCLO_ARENA_RUN_CONFIG="${CYCLOLAB_PATH}/source/cyclo_arena/configs/run.yaml"
 
 #==
@@ -39,7 +38,7 @@ print_help() {
     echo -e "  build                Build the docker image for Cyclo Lab"
     echo -e "  start                Start the docker container"
     echo -e "  start-groot          Auto-select, build, and start the run.yaml GR00T runtime"
-    echo -e "                       Supports N1.6 and N1.7 checkpoint metadata"
+    echo -e "                       Supports N1.7 checkpoint metadata"
     echo -e "                       Add --rebuild to rebuild the selected version"
     echo -e "  recreate             Recreate the container from the current image"
     echo -e "  enter                Enter the running docker container"
@@ -94,21 +93,16 @@ build_groot_image() {
         return 0
     fi
 
-    if [ "${force_rebuild}" != "true" ] \
-        && [ "${image}" = "cyclo-gr00t:n1.6" ] \
-        && docker image inspect "${GROOT_LEGACY_N16_IMAGE}" &> /dev/null; then
-        echo "[INFO] Reusing the existing N1.6 image as ${image}"
-        docker tag "${GROOT_LEGACY_N16_IMAGE}" "${image}"
-        return 0
-    fi
-
     build_root="$(mktemp -d /tmp/cyclo-groot-build.XXXXXX)"
     source_checkout="${build_root}/source"
     git init --quiet "${source_checkout}"
     git -C "${source_checkout}" remote add origin "${GROOT_REPOSITORY_URL}"
     echo "[INFO] Fetching Isaac-GR00T revision: ${source_revision}"
     git -C "${source_checkout}" fetch --quiet --depth 1 origin "${source_revision}"
-    git -C "${source_checkout}" checkout --quiet --detach FETCH_HEAD
+    # The Docker build needs source code only. Avoid downloading large Git LFS
+    # media assets while checking out the pinned Isaac-GR00T revision.
+    GIT_LFS_SKIP_SMUDGE=1 \
+        git -C "${source_checkout}" checkout --quiet --detach FETCH_HEAD
 
     if [ ! -f "${source_checkout}/docker/Dockerfile" ]; then
         echo "[ERROR] Isaac-GR00T Dockerfile is unavailable at ${source_revision}" >&2

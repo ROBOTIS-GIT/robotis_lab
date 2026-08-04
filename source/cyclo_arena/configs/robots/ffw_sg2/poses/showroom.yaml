@@ -1,0 +1,23 @@
+name: showroom
+robot: ffw_sg2
+
+joint_positions:
+  arm_l_joint1: -0.100974
+  arm_l_joint2: 0.983704
+  arm_l_joint3: -0.152672
+  arm_l_joint4: -2.216324
+  arm_l_joint5: 1.142564
+  arm_l_joint6: 0.296328
+  arm_l_joint7: -0.043007
+  gripper_l_joint1: 0.000165
+  arm_r_joint1: -0.024076
+  arm_r_joint2: -0.781951
+  arm_r_joint3: 0.108200
+  arm_r_joint4: -2.244858
+  arm_r_joint5: -0.838353
+  arm_r_joint6: 0.242360
+  arm_r_joint7: -0.103288
+  gripper_r_joint1: 0.000796
+  lift_joint: -0.001931
+  head_joint1: 0.001925
+  head_joint2: 0.000036
