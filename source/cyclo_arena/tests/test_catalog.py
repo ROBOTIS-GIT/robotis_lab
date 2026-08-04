@@ -49,19 +49,22 @@ class CatalogTest(unittest.TestCase):
         self.assertEqual(
             set(REGISTRY.workflows),
             {
-                "policy",
+                "infer",
                 "evaluate",
                 "teleop",
                 "record",
                 "replay",
-                "annotate",
-                "generate",
+                "mimic-annotate",
+                "mimic-generate",
                 "serve",
                 "rl-train",
                 "gr00t-server",
                 "test",
+                "convert",
+                "train",
             },
         )
+        self.assertIs(REGISTRY.workflows["policy"], REGISTRY.workflows["infer"])
 
     def test_components_are_registered_separately(self):
         self.assertEqual(set(REGISTRY.robots), {"ffw_sg2"})

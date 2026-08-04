@@ -24,6 +24,7 @@ from unittest import mock
 
 from cyclo_arena import cli
 from cyclo_arena.catalog import REGISTRY
+from cyclo_arena.core.manifest import ResolvedManifest
 
 
 class CliTest(unittest.TestCase):
@@ -135,6 +136,38 @@ class CliTest(unittest.TestCase):
 
         self.assertEqual(result, 0)
         execute.assert_called_once_with(cli.PASSTHROUGH_WORKFLOWS["policy"], ["--help"])
+
+    def test_infer_accepts_a_named_profile_without_a_config_path(self):
+        manifest = ResolvedManifest(
+            workflow="infer",
+            profile="demo",
+            run_values={
+                "robot": "ffw_sg2",
+                "scene": "galileo",
+                "task": "scene_only",
+                "policy_type": "zero_action",
+            },
+        )
+        output = io.StringIO()
+        with mock.patch.object(cli.ProfileStore, "resolve", return_value=manifest) as resolve:
+            with contextlib.redirect_stdout(output):
+                result = cli.main(["infer", "demo", "--dry-run"])
+
+        self.assertEqual(result, 0)
+        resolve.assert_called_once_with(
+            "demo",
+            REGISTRY,
+            model_adapter_override=None,
+        )
+        self.assertIn("--scene galileo", output.getvalue())
+
+    def test_profile_catalog_is_available_without_isaac_sim(self):
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            result = cli.main(["list", "profiles"])
+
+        self.assertEqual(result, 0)
+        self.assertIn("ffw_sg2_showroom_gr00t", output.getvalue())
 
 
 if __name__ == "__main__":

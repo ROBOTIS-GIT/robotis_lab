@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 import argparse
+import configparser
 import importlib
 import importlib.metadata
 import os
@@ -29,10 +30,14 @@ from pathlib import Path
 from typing import Sequence
 
 CYCLO_LAB_ROOT = Path(os.environ.get("CYCLOLAB_PATH", Path(__file__).resolve().parents[3])).resolve()
-ISAACLAB_ROOT = CYCLO_LAB_ROOT / "third_party" / "IsaacLab"
-ARENA_ROOT = CYCLO_LAB_ROOT / "third_party" / "IsaacLab-Arena"
+ISAACLAB_SUBMODULE_PATH = Path("third_party/IsaacLab")
+ARENA_SUBMODULE_PATH = Path("third_party/IsaacLab-Arena")
+ISAACLAB_ROOT = CYCLO_LAB_ROOT / ISAACLAB_SUBMODULE_PATH
+ARENA_ROOT = CYCLO_LAB_ROOT / ARENA_SUBMODULE_PATH
 ZENOH_SDK_ROOT = CYCLO_LAB_ROOT / "third_party" / "zenoh_ros2_sdk"
-EXPECTED_ISAACLAB_COMMIT = "5528d986d8909825a29f3c97656108abf054a261"
+ARENA_SUBMODULE_NAME = "third_party/IsaacLab-Arena"
+EXPECTED_ARENA_URL = "https://github.com/isaac-sim/IsaacLab-Arena.git"
+EXPECTED_ARENA_BRANCH = "feature/arena_v0.2_on_lab_2.3"
 EXPECTED_ZENOH_SDK_COMMIT = "be2c4d4595305a9c282fca09820a8b3bfb8076a3"
 EXPECTED_ZENOH_SDK_VERSION = "0.1.8"
 EXPECTED_CYCLO_ARENA_VERSION = "0.1.0"
@@ -45,24 +50,57 @@ OPTIONAL_MODULES = {
 DEFERRED_SIMULATION_MODULES = ("isaaclab_arena.policy.action_chunking_client",)
 
 
+def _run_git(root: Path, *args: str) -> str | None:
+    """Run a read-only Git query and return stripped stdout when it succeeds."""
+    try:
+        result = subprocess.run(
+            ["git", "-c", f"safe.directory={root}", "-C", str(root), *args],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except OSError:
+        return None
+    if result.returncode != 0:
+        return None
+    return result.stdout.strip()
+
+
 def _submodule_commit(submodule_root: Path) -> str | None:
     if not (submodule_root / ".git").exists():
         return None
-    result = subprocess.run(
-        [
-            "git",
-            "-c",
-            f"safe.directory={submodule_root}",
-            "-C",
-            str(submodule_root),
-            "rev-parse",
-            "HEAD",
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    return result.stdout.strip()
+    return _run_git(submodule_root, "rev-parse", "HEAD")
+
+
+def _gitlink_entry(superproject_root: Path, submodule_root: Path) -> tuple[str, str, str] | None:
+    """Return the committed mode, object type, and revision for a submodule path."""
+    try:
+        relative_path = submodule_root.relative_to(superproject_root)
+    except ValueError:
+        return None
+    output = _run_git(superproject_root, "ls-tree", "HEAD", "--", relative_path.as_posix())
+    if not output:
+        return None
+    metadata, separator, _ = output.partition("\t")
+    fields = metadata.split()
+    if not separator or len(fields) != 3:
+        return None
+    mode, object_type, commit = fields
+    return mode, object_type, commit
+
+
+def _gitmodule_values(gitmodules_path: Path, submodule_name: str) -> dict[str, str] | None:
+    """Load one submodule section from a .gitmodules file."""
+    try:
+        contents = gitmodules_path.read_text(encoding="utf-8")
+        parser = configparser.ConfigParser(interpolation=None)
+        parser.read_string(contents)
+    except (OSError, configparser.Error):
+        return None
+    section = f'submodule "{submodule_name}"'
+    if not parser.has_section(section):
+        return None
+    return dict(parser.items(section))
 
 
 def _import_module(module_name: str):
@@ -87,14 +125,64 @@ def _check_submodule(
         failures.append(f"Expected {label} {expected_commit}, found {commit}")
 
 
+def _check_pinned_submodule(
+    label: str,
+    superproject_root: Path,
+    submodule_root: Path,
+    failures: list[str],
+) -> None:
+    """Validate an initialized submodule against its committed gitlink."""
+    entry = _gitlink_entry(superproject_root, submodule_root)
+    if entry is None:
+        failures.append(f"{label} has no committed gitlink: {submodule_root}")
+        return
+    mode, object_type, expected_commit = entry
+    if mode != "160000" or object_type != "commit":
+        failures.append(f"{label} must be a 160000 gitlink, found mode={mode} type={object_type}: {submodule_root}")
+        return
+
+    commit = _submodule_commit(submodule_root)
+    if commit is None:
+        failures.append(f"{label} submodule is missing or uninitialized: {submodule_root}")
+        return
+    if commit != expected_commit:
+        failures.append(f"Expected {label} gitlink {expected_commit}, found {commit}")
+        return
+    print(f"[OK] {label} submodule matches gitlink: {commit}")
+
+
+def _check_arena_gitmodule(superproject_root: Path, failures: list[str]) -> None:
+    """Validate Arena's official upstream and Lab 2.3 compatibility branch."""
+    values = _gitmodule_values(superproject_root / ".gitmodules", ARENA_SUBMODULE_NAME)
+    if values is None:
+        failures.append(f"Arena submodule is not configured in {superproject_root / '.gitmodules'}")
+        return
+
+    expected_values = {
+        "path": ARENA_SUBMODULE_PATH.as_posix(),
+        "url": EXPECTED_ARENA_URL,
+        "branch": EXPECTED_ARENA_BRANCH,
+    }
+    for key, expected_value in expected_values.items():
+        actual_value = values.get(key)
+        if actual_value != expected_value:
+            failures.append(f"Expected Arena .gitmodules {key}={expected_value}, found {actual_value}")
+    if all(values.get(key) == expected_value for key, expected_value in expected_values.items()):
+        print(f"[OK] Arena upstream: {EXPECTED_ARENA_URL} ({EXPECTED_ARENA_BRANCH})")
+
+
+def _check_dependency_contracts(failures: list[str]) -> None:
+    """Validate pinned simulation dependencies and the fixed Zenoh release."""
+    _check_pinned_submodule("Isaac Lab", CYCLO_LAB_ROOT, ISAACLAB_ROOT, failures)
+    _check_arena_gitmodule(CYCLO_LAB_ROOT, failures)
+    _check_pinned_submodule("Arena", CYCLO_LAB_ROOT, ARENA_ROOT, failures)
+    _check_submodule("Zenoh ROS2 SDK", ZENOH_SDK_ROOT, EXPECTED_ZENOH_SDK_COMMIT, failures)
+
+
 def run_checks(strict: bool = False) -> int:
     """Run installation checks and return a process status."""
     failures: list[str] = []
-    _check_submodule("Isaac Lab", ISAACLAB_ROOT, EXPECTED_ISAACLAB_COMMIT, failures)
-    # Arena follows its configured compatibility branch. Validate its public
-    # integration contracts below instead of rejecting every upstream update.
-    _check_submodule("Arena", ARENA_ROOT, None, failures)
-    _check_submodule("Zenoh ROS2 SDK", ZENOH_SDK_ROOT, EXPECTED_ZENOH_SDK_COMMIT, failures)
+    _check_dependency_contracts(failures)
 
     if str(ARENA_ROOT) not in sys.path:
         sys.path.insert(0, str(ARENA_ROOT))

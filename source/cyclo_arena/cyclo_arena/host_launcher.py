@@ -33,11 +33,18 @@ from typing import Sequence
 
 from cyclo_arena.catalog import REGISTRY
 from cyclo_arena.core.config import load_run_config
-from cyclo_arena.core.model_resolver import ResolvedModel, model_search_root
+from cyclo_arena.core.manifest import ResolvedManifest
+from cyclo_arena.core.model_resolver import (
+    MODEL_ROOT_ENVIRONMENT,
+    ResolvedModel,
+    model_search_root,
+)
+from cyclo_arena.core.profile_store import DEFAULT_PROFILE_ID, ProfileStore
 from cyclo_arena.core.server_state import write_server_state
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 CONTAINER_REPOSITORY_ROOT = Path("/workspace/cyclo_lab")
+CONTAINER_MODEL_ROOT = Path("/workspace/model")
 SERVER_CHECKPOINT_PATH = "/models/checkpoint"
 SERVER_CYCLO_ARENA_ROOT = "/opt/cyclo_arena"
 SERVER_ISAACLAB_ARENA_ROOT = "/opt/isaaclab_arena"
@@ -361,34 +368,45 @@ def _ensure_model_server(
     )
 
 
+def _model_workspace_root() -> Path:
+    """Return the host directory mounted at /workspace/model."""
+    configured = os.environ.get(MODEL_ROOT_ENVIRONMENT)
+    root = Path(configured) if configured else REPOSITORY_ROOT / "docker" / "workspace" / "model"
+    return root.expanduser().resolve()
+
+
+def _persist_manifest(manifest: ResolvedManifest) -> tuple[Path, Path]:
+    """Persist one process-boundary manifest and return host/container paths."""
+    host_root = _model_workspace_root()
+    relative_path = Path(".cyclo_arena") / "manifests" / f"{manifest.fingerprint}.json"
+    host_path = manifest.write(host_root / relative_path)
+    return host_path, CONTAINER_MODEL_ROOT / relative_path
+
+
 def _launch_in_container(
     container_name: str,
-    config_path: Path,
+    manifest: ResolvedManifest,
     forwarded_args: Sequence[str],
-    model_adapter: str | None = None,
-    remote_port: int | None = None,
 ) -> int:
-    """Run the simulator through the repository launcher inside Cyclo Lab."""
-    relative_config = config_path.resolve().relative_to(REPOSITORY_ROOT)
-    container_config = CONTAINER_REPOSITORY_ROOT / relative_config
+    """Run one resolved manifest through the repository launcher inside Cyclo Lab."""
+    _, container_manifest = _persist_manifest(manifest)
+    run_args = list(forwarded_args)
+    visualization_overridden = any(argument in {"--headless", "--windowed"} for argument in run_args)
+    if manifest.run_values.get("headless") and not visualization_overridden:
+        run_args.insert(0, "--headless")
     command = ["docker", "exec"]
     if sys.stdin.isatty() and sys.stdout.isatty():
         command.append("-it")
     if os.environ.get("DISPLAY"):
         command += ["-e", f"DISPLAY={os.environ['DISPLAY']}"]
-    run_args = [*forwarded_args]
-    if model_adapter is not None:
-        run_args += ["--resolved-model-adapter", model_adapter]
-    if remote_port is not None:
-        run_args += ["--remote-port", str(remote_port)]
     command += [
         "-w",
         str(CONTAINER_REPOSITORY_ROOT),
         container_name,
         str(CONTAINER_REPOSITORY_ROOT / "scripts" / "arena" / "run.sh"),
         "--inside",
-        "--config",
-        str(container_config),
+        "--manifest",
+        str(container_manifest),
         *run_args,
     ]
     return _run(command, check=False).returncode
@@ -397,7 +415,9 @@ def _launch_in_container(
 def main(argv: Sequence[str] | None = None) -> int:
     """Resolve a checkpoint, prepare its server, and launch Cyclo Arena."""
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", type=Path, required=True)
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument("--config", type=Path)
+    source.add_argument("--profile", default=None)
     parser.add_argument("--prepare-only", action="store_true")
     parser.add_argument("--print-server-runtime", action="store_true")
     parser.add_argument("forwarded_args", nargs=argparse.REMAINDER)
@@ -406,10 +426,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     if forwarded_args[:1] == ["--"]:
         forwarded_args.pop(0)
 
-    config_path = args.config.expanduser().resolve()
-    config_path.relative_to(REPOSITORY_ROOT)
-    config = load_run_config(config_path)
-    model = config.resolve_model(REGISTRY)
+    if args.config is not None:
+        manifest = ResolvedManifest.from_run_config(load_run_config(args.config), REGISTRY)
+    else:
+        manifest = ProfileStore().resolve(args.profile or DEFAULT_PROFILE_ID, REGISTRY)
+    model = manifest.model.to_resolved_model(REGISTRY) if manifest.model is not None else None
     if args.print_server_runtime:
         assert model is not None, "A GR00T model must be selected in run.yaml"
         print(f"{model.adapter.server_image}\t{model.adapter.server_source_revision}")
@@ -434,12 +455,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             flush=True,
         )
         return 0
+    if remote_port is not None:
+        manifest = manifest.with_run_overrides(remote_host="127.0.0.1", remote_port=remote_port)
     return _launch_in_container(
         container_name,
-        config_path,
+        manifest,
         forwarded_args,
-        model_adapter=model.adapter.name if model is not None else None,
-        remote_port=remote_port,
     )
 
 

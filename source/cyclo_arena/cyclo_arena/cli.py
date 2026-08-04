@@ -19,70 +19,30 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import shlex
 import sys
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
 
 from cyclo_arena.catalog import REGISTRY
 from cyclo_arena.core.config import load_run_config
+from cyclo_arena.core.manifest import ResolvedManifest
 from cyclo_arena.core.model_resolver import discover_models, model_search_root
+from cyclo_arena.core.profile_store import DEFAULT_PROFILE_ID, ProfileStore
 from cyclo_arena.core.robot_pose import list_robot_poses
+from cyclo_arena.core.workflows import WORKFLOWS, WorkflowKind, WorkflowSpec
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 ISAAC_SIM_PYTHON = Path("/isaac-sim/python.sh")
 ISAAC_SIM_REEXEC_ENV = "CYCLO_ARENA_ISAAC_SIM_PYTHON"
-COMPOSED_ENVIRONMENT_CLASS = (
-    "cyclo_arena.environments.composed:CycloArenaEnvironment"
-)
+COMPOSED_ENVIRONMENT_CLASS = "cyclo_arena.environments.composed:CycloArenaEnvironment"
 COMPOSED_ENVIRONMENT_NAME = "cyclo_composed"
 
 
-@dataclass(frozen=True)
-class WorkflowTarget:
-    """Describe an upstream Python module or repository script."""
-
-    kind: str
-    target: str
-    default_args: tuple[str, ...] = ()
-
-
-PASSTHROUGH_WORKFLOWS = {
-    "policy": WorkflowTarget("module", "isaaclab_arena.evaluation.policy_runner"),
-    "evaluate": WorkflowTarget("module", "isaaclab_arena.evaluation.eval_runner"),
-    "teleop": WorkflowTarget(
-        "module", "isaaclab_arena.scripts.imitation_learning.teleop"
-    ),
-    "record": WorkflowTarget(
-        "module", "isaaclab_arena.scripts.imitation_learning.record_demos"
-    ),
-    "replay": WorkflowTarget(
-        "module", "isaaclab_arena.scripts.imitation_learning.replay_demos"
-    ),
-    "annotate": WorkflowTarget(
-        "module", "isaaclab_arena.scripts.imitation_learning.annotate_demos"
-    ),
-    "generate": WorkflowTarget(
-        "module", "isaaclab_arena.scripts.imitation_learning.generate_dataset"
-    ),
-    "serve": WorkflowTarget(
-        "module", "isaaclab_arena.remote_policy.remote_policy_server_runner"
-    ),
-    "rl-train": WorkflowTarget(
-        "script",
-        "third_party/IsaacLab/scripts/reinforcement_learning/rsl_rl/train.py",
-    ),
-    "gr00t-server": WorkflowTarget(
-        "shell", "third_party/IsaacLab-Arena/docker/run_gr00t_server.sh"
-    ),
-    "test": WorkflowTarget(
-        "module",
-        "pytest",
-        ("-q", "third_party/IsaacLab-Arena/isaaclab_arena/tests"),
-    ),
-}
+# Kept as a public compatibility alias while all metadata now comes from one registry.
+PASSTHROUGH_WORKFLOWS = WORKFLOWS
 
 
 def _python_launcher() -> str:
@@ -92,21 +52,23 @@ def _python_launcher() -> str:
     return sys.executable
 
 
-def _exec_workflow(target: WorkflowTarget, forwarded_args: Sequence[str]) -> None:
+def _exec_workflow(target: WorkflowSpec, forwarded_args: Sequence[str]) -> None:
     """Replace this process with an upstream Arena workflow."""
+    assert target.is_supported, target.readiness_detail
+    assert target.upstream_target is not None
     workflow_args = list(forwarded_args) or list(target.default_args)
-    if target.kind == "module":
-        command = [_python_launcher(), "-m", target.target, *workflow_args]
+    if target.kind is WorkflowKind.MODULE:
+        command = [_python_launcher(), "-m", target.upstream_target, *workflow_args]
     else:
-        target_path = REPOSITORY_ROOT / target.target
+        target_path = REPOSITORY_ROOT / target.upstream_target
         if not target_path.is_file():
             raise FileNotFoundError(
                 f"Workflow target is unavailable: {target_path}. "
                 "Initialize the corresponding optional submodule or dependency first."
             )
-        if target.kind == "script":
+        if target.kind is WorkflowKind.SCRIPT:
             command = [_python_launcher(), str(target_path), *workflow_args]
-        elif target.kind == "shell":
+        elif target.kind is WorkflowKind.SHELL:
             command = ["bash", str(target_path), *workflow_args]
         else:
             raise ValueError(f"Unsupported workflow target kind: {target.kind}")
@@ -128,14 +90,25 @@ def _ensure_isaac_sim_python(command_args: Sequence[str]) -> None:
     os.execve(command[0], command, environment)
 
 
-def _add_run_parser(subparsers) -> None:
+def _add_run_parser(subparsers, command: str) -> None:
     parser = subparsers.add_parser(
-        "run", help="Launch a Cyclo-owned Arena environment with a policy."
+        command,
+        help="Launch a named Cyclo Arena profile with an inference policy.",
+    )
+    parser.add_argument(
+        "profile_id",
+        nargs="?",
+        help=f"Named profile ID (default: {DEFAULT_PROFILE_ID}).",
     )
     parser.add_argument(
         "--config",
         type=Path,
-        help="Cyclo Arena YAML run configuration.",
+        help="Legacy Cyclo Arena YAML run configuration.",
+    )
+    parser.add_argument(
+        "--manifest",
+        type=Path,
+        help=argparse.SUPPRESS,
     )
     parser.add_argument("--robot", choices=tuple(REGISTRY.robots))
     parser.add_argument("--scene", choices=tuple(REGISTRY.scenes))
@@ -160,12 +133,8 @@ def _add_run_parser(subparsers) -> None:
         action="store_false",
     )
     visualization = parser.add_mutually_exclusive_group()
-    visualization.add_argument(
-        "--headless", dest="headless", action="store_true", default=None
-    )
-    visualization.add_argument(
-        "--windowed", dest="headless", action="store_false"
-    )
+    visualization.add_argument("--headless", dest="headless", action="store_true", default=None)
+    visualization.add_argument("--windowed", dest="headless", action="store_false")
     parser.add_argument("--embodiment")
     parser.add_argument("--robot-pose")
     parser.add_argument(
@@ -208,19 +177,14 @@ def _add_run_parser(subparsers) -> None:
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    workflow_names = ", ".join(PASSTHROUGH_WORKFLOWS)
+    workflow_names = ", ".join(WORKFLOWS)
     parser = argparse.ArgumentParser(
         prog="cyclo-arena",
         description="ROBOTIS launcher for Isaac Lab Arena environments and workflows.",
-        epilog=(
-            "Exact upstream passthrough commands: "
-            f"{workflow_names}. Example: cyclo-arena policy --help"
-        ),
+        epilog=f"Exact upstream passthrough commands: {workflow_names}. Example: cyclo-arena policy --help",
     )
     subparsers = parser.add_subparsers(dest="command")
-    doctor = subparsers.add_parser(
-        "doctor", help="Verify the complete Cyclo Arena installation."
-    )
+    doctor = subparsers.add_parser("doctor", help="Verify the complete Cyclo Arena installation.")
     doctor.add_argument("--strict", action="store_true")
     listing = subparsers.add_parser("list", help="List Cyclo Arena integrations.")
     listing.add_argument(
@@ -234,12 +198,23 @@ def _build_parser() -> argparse.ArgumentParser:
             "models",
             "model-adapters",
             "poses",
+            "profiles",
             "workflows",
         ),
         nargs="?",
         default="robots",
     )
-    _add_run_parser(subparsers)
+    show = subparsers.add_parser("show", help="Show a resolved Cyclo Arena resource.")
+    show.add_argument("category", choices=("profile",))
+    show.add_argument("name", nargs="?", default=DEFAULT_PROFILE_ID)
+    plan = subparsers.add_parser("plan", help="Resolve a profile without launching Docker or Isaac Sim.")
+    plan.add_argument("profile_id", nargs="?")
+    plan.add_argument("--config", type=Path)
+    validate = subparsers.add_parser("validate", help="Validate a profile and its local checkpoint.")
+    validate.add_argument("profile_id", nargs="?")
+    validate.add_argument("--config", type=Path)
+    _add_run_parser(subparsers, "infer")
+    _add_run_parser(subparsers, "run")
     return parser
 
 
@@ -253,11 +228,7 @@ def _print_catalog(category: str) -> None:
             print("No GR00T checkpoints were found.")
             return
         for model in models:
-            compatibility = (
-                ", ".join(model.compatible_adapters)
-                if model.compatible_adapters
-                else "incompatible"
-            )
+            compatibility = ", ".join(model.compatible_adapters) if model.compatible_adapters else "incompatible"
             print(model.checkpoint)
             print(f"  type: {model.model_type}")
             print(f"  adapter: {compatibility}")
@@ -275,38 +246,107 @@ def _print_catalog(category: str) -> None:
             for embodiment in robot.embodiments
         }
     elif category == "policies":
-        entries = {
-            name: spec.description for name, spec in REGISTRY.policies.items()
-        }
+        entries = {name: spec.description for name, spec in REGISTRY.policies.items()}
     elif category == "model-adapters":
-        entries = {
-            name: spec.description
-            for name, spec in REGISTRY.model_adapters.items()
-        }
+        entries = {name: spec.description for name, spec in REGISTRY.model_adapters.items()}
     elif category == "poses":
         entries = {
             f"{robot}/{pose}": "Named initial joint pose."
             for robot in REGISTRY.robots
             for pose in list_robot_poses(robot)
         }
+    elif category == "profiles":
+        store = ProfileStore()
+        entries = {name: str(store.get(name).path) for name in store.names()}
+    elif category == "workflows":
+        for name, spec in WORKFLOWS.items():
+            aliases = f"; aliases: {', '.join(spec.aliases)}" if spec.aliases else ""
+            print(f"{name:24} [{spec.readiness.value}] {spec.description}{aliases}")
+            if spec.readiness_detail:
+                print(f"{'':24} {spec.readiness_detail}")
+        return
     else:
-        entries = {
-            name: spec.description for name, spec in REGISTRY.workflows.items()
-        }
+        raise AssertionError(f"Unknown catalog category: {category}")
     for name, description in entries.items():
         print(f"{name:24} {description}")
 
 
-def _resolve_run_args(args: argparse.Namespace) -> argparse.Namespace:
-    """Merge an optional run file with explicit CLI overrides."""
-    values = {}
-    if args.config is not None:
-        values.update(
-            load_run_config(args.config).to_run_values(
-                REGISTRY,
-                model_adapter_override=args.resolved_model_adapter,
-            )
+def _resolve_manifest_source(
+    *,
+    profile_id: str | None,
+    config_path: Path | None,
+    manifest_path: Path | None = None,
+    model_adapter_override: str | None = None,
+    use_default_profile: bool = True,
+) -> ResolvedManifest | None:
+    """Resolve exactly one profile, legacy config, or process-boundary manifest."""
+    selected_sources = sum(value is not None for value in (profile_id, config_path, manifest_path))
+    assert selected_sources <= 1, "Select only one profile, --config, or --manifest"
+    if manifest_path is not None:
+        return ResolvedManifest.load(manifest_path)
+    if config_path is not None:
+        return ResolvedManifest.from_run_config(
+            load_run_config(config_path),
+            REGISTRY,
+            model_adapter_override=model_adapter_override,
         )
+    if profile_id is not None or use_default_profile:
+        return ProfileStore().resolve(
+            profile_id or DEFAULT_PROFILE_ID,
+            REGISTRY,
+            model_adapter_override=model_adapter_override,
+        )
+    return None
+
+
+def _show_profile(name: str) -> None:
+    """Print a named profile and its source path without resolving a model."""
+    profile = ProfileStore().get(name)
+    print(f"# profile: {profile.name}")
+    print(f"# source: {profile.path}")
+    print(profile.path.read_text(encoding="utf-8"), end="")
+
+
+def _resolve_planning_manifest(args: argparse.Namespace) -> ResolvedManifest:
+    """Resolve the profile/config source shared by plan and validate commands."""
+    manifest = _resolve_manifest_source(
+        profile_id=args.profile_id,
+        config_path=args.config,
+    )
+    assert manifest is not None
+    return manifest
+
+
+def _print_plan(args: argparse.Namespace) -> None:
+    """Print the exact immutable plan that would cross into the container."""
+    print(json.dumps(_resolve_planning_manifest(args).to_mapping(), indent=2, sort_keys=True))
+
+
+def _validate_plan(args: argparse.Namespace) -> None:
+    """Validate and summarize a profile without launching any runtime process."""
+    manifest = _resolve_planning_manifest(args)
+    values = manifest.run_values
+    selected = manifest.profile or str(manifest.source_path)
+    print(f"[OK] profile: {selected}")
+    print(f"[OK] composition: {values['robot']} + {values['scene']} + {values['task']}")
+    if manifest.model is not None:
+        print(f"[OK] model: {manifest.model.checkpoint}")
+        print(f"[OK] adapter: {manifest.model.adapter}")
+
+
+def _resolve_run_args(args: argparse.Namespace) -> argparse.Namespace:
+    """Merge a resolved manifest with explicit CLI overrides."""
+    values = {}
+    direct_composition = args.robot is not None and args.scene is not None
+    manifest = _resolve_manifest_source(
+        profile_id=args.profile_id,
+        config_path=args.config,
+        manifest_path=args.manifest,
+        model_adapter_override=args.resolved_model_adapter,
+        use_default_profile=not direct_composition,
+    )
+    if manifest is not None:
+        values.update(manifest.to_run_values())
 
     override_names = (
         "robot",
@@ -373,9 +413,7 @@ def _resolve_run_args(args: argparse.Namespace) -> argparse.Namespace:
         dry_run=args.dry_run,
     )
     if resolved.robot is None or resolved.scene is None:
-        raise ValueError(
-            "Select robot and scene in --config or with --robot and --scene"
-        )
+        raise ValueError("Select robot and scene in --config or with --robot and --scene")
     return resolved
 
 
@@ -387,8 +425,7 @@ def _run_environment(args: argparse.Namespace) -> int:
     if embodiment not in plan.robot.embodiments:
         allowed = ", ".join(plan.robot.embodiments)
         raise ValueError(
-            f"Embodiment {embodiment!r} is not valid for robot "
-            f"{plan.robot.name!r}. Choose one of: {allowed}"
+            f"Embodiment {embodiment!r} is not valid for robot {plan.robot.name!r}. Choose one of: {allowed}"
         )
 
     forwarded = [
@@ -447,9 +484,10 @@ def _run_environment(args: argparse.Namespace) -> int:
         forwarded += ["--lift_position", str(args.lift_position)]
     forwarded += ["--kitchen_layout", str(args.kitchen_layout)]
     forwarded += ["--kitchen_style", str(args.kitchen_style)]
-    target = PASSTHROUGH_WORKFLOWS["policy"]
+    target = WORKFLOWS["infer"]
     if args.dry_run:
-        command = [_python_launcher(), "-m", target.target, *forwarded]
+        assert target.upstream_target is not None
+        command = [_python_launcher(), "-m", target.upstream_target, *forwarded]
         print(shlex.join(command))
         return 0
     _exec_workflow(target, forwarded)
@@ -459,8 +497,9 @@ def _run_environment(args: argparse.Namespace) -> int:
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the Cyclo Arena command-line interface."""
     command_args = list(sys.argv[1:] if argv is None else argv)
-    if command_args and command_args[0] in PASSTHROUGH_WORKFLOWS:
-        _exec_workflow(PASSTHROUGH_WORKFLOWS[command_args[0]], command_args[1:])
+    composed_commands = {"infer", "run"}
+    if command_args and command_args[0] in WORKFLOWS.command_names and command_args[0] not in composed_commands:
+        _exec_workflow(WORKFLOWS[command_args[0]], command_args[1:])
         return 0
 
     parser = _build_parser()
@@ -476,7 +515,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "list":
         _print_catalog(args.category)
         return 0
-    if args.command == "run":
+    if args.command == "show":
+        _show_profile(args.name)
+        return 0
+    if args.command == "plan":
+        _print_plan(args)
+        return 0
+    if args.command == "validate":
+        _validate_plan(args)
+        return 0
+    if args.command in composed_commands:
         _ensure_isaac_sim_python(command_args)
         return _run_environment(args)
     parser.error(f"Unknown command: {args.command}")

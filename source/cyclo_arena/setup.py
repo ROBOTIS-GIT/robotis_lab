@@ -24,6 +24,9 @@ from setuptools import find_packages, setup
 PACKAGE_ROOT = Path(__file__).resolve().parent
 with (PACKAGE_ROOT / "config" / "extension.toml").open("rb") as metadata_file:
     EXTENSION_METADATA = load(metadata_file)
+PROFILE_FILES = [
+    str(path.relative_to(PACKAGE_ROOT)) for path in sorted((PACKAGE_ROOT / "configs" / "profiles").glob("*.yaml"))
+]
 
 setup(
     name="cyclo_arena",
@@ -34,6 +37,7 @@ setup(
     url=EXTENSION_METADATA["package"]["repository"],
     packages=find_packages(),
     include_package_data=True,
+    data_files=[("share/cyclo_arena/profiles", PROFILE_FILES)],
     python_requires=">=3.11",
     install_requires=["cyclo_lab"],
     entry_points={"console_scripts": ["cyclo-arena=cyclo_arena.cli:main"]},

@@ -20,10 +20,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Mapping
+from typing import TYPE_CHECKING, Any, Mapping
 
 from cyclo_arena.core.capabilities import Capability
 from cyclo_arena.core.registry import CycloArenaRegistry
+
+if TYPE_CHECKING:
+    from cyclo_arena.core.model_resolver import ResolvedModel
 
 CONFIG_SCHEMA_VERSION = 1
 
@@ -274,6 +277,7 @@ class RunConfig:
         self,
         registry: CycloArenaRegistry,
         model_adapter_override: str | None = None,
+        resolved_model: ResolvedModel | None = None,
     ) -> dict[str, Any]:
         """Validate registry compatibility and return CLI-shaped run values."""
         assert self.robot.name in registry.robots, f"Unknown Cyclo Arena robot: {self.robot.name!r}"
@@ -283,7 +287,7 @@ class RunConfig:
         model_adapter = None
         if self.model is not None:
             if model_adapter_override is None:
-                model = self.resolve_model(registry)
+                model = resolved_model or self.resolve_model(registry)
                 model_adapter = model.adapter
             else:
                 assert (

@@ -24,6 +24,7 @@ from unittest import mock
 
 from cyclo_arena import host_launcher
 from cyclo_arena.catalog import REGISTRY
+from cyclo_arena.core.manifest import ResolvedManifest
 from cyclo_arena.core.model_resolver import ResolvedModel
 
 
@@ -52,20 +53,21 @@ class HostLauncherTest(unittest.TestCase):
         with mock.patch(
             "cyclo_arena.core.config.RunConfig.resolve_model",
             return_value=self.model,
-        ):
+        ) as resolve_model:
             ensure_model.return_value = 61234
             result = host_launcher.main(["--config", str(self.config_path)])
 
         self.assertEqual(result, 0)
+        resolve_model.assert_called_once()
         ensure_container.assert_called_once_with("cyclo_lab")
         ensure_model.assert_called_once_with("cyclo_lab", self.model)
-        launch.assert_called_once_with(
-            "cyclo_lab",
-            self.config_path,
-            [],
-            model_adapter="ffw_sg2_gr00t_n17",
-            remote_port=61234,
-        )
+        launch.assert_called_once()
+        container_name, manifest, forwarded_args = launch.call_args.args
+        self.assertEqual(container_name, "cyclo_lab")
+        self.assertIsInstance(manifest, ResolvedManifest)
+        self.assertEqual(manifest.run_values["remote_port"], 61234)
+        self.assertEqual(manifest.model.adapter, "ffw_sg2_gr00t_n17")
+        self.assertEqual(forwarded_args, [])
 
     @mock.patch.object(host_launcher, "_launch_in_container", return_value=0)
     @mock.patch.object(host_launcher, "_ensure_model_server")
@@ -81,18 +83,18 @@ class HostLauncherTest(unittest.TestCase):
         with mock.patch(
             "cyclo_arena.core.config.RunConfig.resolve_model",
             return_value=self.model,
-        ):
+        ) as resolve_model:
             result = host_launcher.main(["--config", str(self.config_path), "--", "--dry-run"])
 
         self.assertEqual(result, 0)
+        resolve_model.assert_called_once()
         ensure_model.assert_not_called()
-        launch.assert_called_once_with(
-            "cyclo_lab",
-            self.config_path,
-            ["--dry-run"],
-            model_adapter="ffw_sg2_gr00t_n17",
-            remote_port=None,
-        )
+        launch.assert_called_once()
+        container_name, manifest, forwarded_args = launch.call_args.args
+        self.assertEqual(container_name, "cyclo_lab")
+        self.assertIsInstance(manifest, ResolvedManifest)
+        self.assertIsNone(manifest.run_values["remote_port"])
+        self.assertEqual(forwarded_args, ["--dry-run"])
 
     def test_runtime_query_prints_checkpoint_selected_image(self):
         output = io.StringIO()
@@ -149,6 +151,32 @@ class HostLauncherTest(unittest.TestCase):
             f"{host_launcher.SERVER_ISAACLAB_ARENA_ROOT}:ro",
             docker_run,
         )
+
+    @mock.patch.object(host_launcher, "_persist_manifest")
+    @mock.patch.object(host_launcher, "_run")
+    def test_container_receives_only_the_resolved_manifest(self, run, persist_manifest):
+        manifest = ResolvedManifest(
+            workflow="infer",
+            run_values={"headless": True},
+        )
+        persist_manifest.return_value = (
+            Path("/models/.cyclo_arena/manifests/test.json"),
+            Path("/workspace/model/.cyclo_arena/manifests/test.json"),
+        )
+        run.return_value = mock.Mock(returncode=0)
+
+        result = host_launcher._launch_in_container(
+            "cyclo_lab",
+            manifest,
+            ["--num-steps", "2"],
+        )
+
+        self.assertEqual(result, 0)
+        command = run.call_args.args[0]
+        self.assertIn("--manifest", command)
+        self.assertIn("/workspace/model/.cyclo_arena/manifests/test.json", command)
+        self.assertIn("--headless", command)
+        self.assertNotIn("--config", command)
 
 
 if __name__ == "__main__":

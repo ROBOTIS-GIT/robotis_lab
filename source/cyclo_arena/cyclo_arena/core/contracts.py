@@ -167,14 +167,6 @@ class ModelAdapterSpec:
 
 
 @dataclass(frozen=True)
-class WorkflowSpec:
-    """Describe one user-facing Cyclo Arena workflow."""
-
-    name: str
-    description: str
-
-
-@dataclass(frozen=True)
 class CompositionPlan:
     """Hold validated static components for one environment build."""
 

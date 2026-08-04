@@ -28,7 +28,6 @@ from cyclo_arena.core.contracts import (
     RobotSpec,
     SceneSpec,
     TaskSpec,
-    WorkflowSpec,
 )
 from cyclo_arena.core.registry import CycloArenaRegistry
 
@@ -261,21 +260,6 @@ def _build_registry() -> CycloArenaRegistry:
         )
     )
 
-    workflow_descriptions = {
-        "policy": "Run one policy in one Arena environment.",
-        "evaluate": "Run a sequential JSON evaluation job set.",
-        "teleop": "Teleoperate an Arena environment.",
-        "record": "Record teleoperated demonstrations to HDF5.",
-        "replay": "Replay an Arena demonstration dataset.",
-        "annotate": "Annotate demonstrations for Isaac Lab Mimic.",
-        "generate": "Generate Mimic demonstrations from annotated source data.",
-        "serve": "Run an Arena remote policy server.",
-        "rl-train": "Train an Arena RL environment with Isaac Lab RSL-RL.",
-        "gr00t-server": "Start Arena's isolated GR00T server container.",
-        "test": "Run the Arena pytest suite or a selected subset.",
-    }
-    for name, description in workflow_descriptions.items():
-        registry.register_workflow(WorkflowSpec(name=name, description=description))
     return registry
 
 

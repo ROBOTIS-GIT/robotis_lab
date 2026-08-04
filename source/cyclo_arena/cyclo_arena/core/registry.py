@@ -19,7 +19,7 @@
 from __future__ import annotations
 
 from types import MappingProxyType
-from typing import Mapping, TypeVar
+from typing import TYPE_CHECKING, Mapping, TypeVar
 
 from cyclo_arena.core.contracts import (
     CompositionPlan,
@@ -28,8 +28,10 @@ from cyclo_arena.core.contracts import (
     RobotSpec,
     SceneSpec,
     TaskSpec,
-    WorkflowSpec,
 )
+
+if TYPE_CHECKING:
+    from cyclo_arena.core.workflows import WorkflowSpec
 
 SpecT = TypeVar("SpecT")
 
@@ -43,7 +45,6 @@ class CycloArenaRegistry:
         self._tasks: dict[str, TaskSpec] = {}
         self._policies: dict[str, PolicySpec] = {}
         self._model_adapters: dict[str, ModelAdapterSpec] = {}
-        self._workflows: dict[str, WorkflowSpec] = {}
 
     @staticmethod
     def _register(collection: dict[str, SpecT], name: str, spec: SpecT) -> None:
@@ -71,10 +72,9 @@ class CycloArenaRegistry:
         assert spec.robot in self._robots, f"Unknown robot: {spec.robot!r}"
         assert spec.policy in self._policies, f"Unknown policy: {spec.policy!r}"
         robot = self._robots[spec.robot]
-        assert spec.embodiment in robot.embodiments, (
-            f"Adapter {spec.name!r} embodiment {spec.embodiment!r} is not registered "
-            f"for robot {robot.name!r}"
-        )
+        assert (
+            spec.embodiment in robot.embodiments
+        ), f"Adapter {spec.name!r} embodiment {spec.embodiment!r} is not registered for robot {robot.name!r}"
         policy = self._policies[spec.policy]
         missing_capabilities = policy.required_capabilities - robot.capabilities
         assert not missing_capabilities, (
@@ -82,10 +82,6 @@ class CycloArenaRegistry:
             f"{sorted(capability.value for capability in missing_capabilities)}"
         )
         self._register(self._model_adapters, spec.name, spec)
-
-    def register_workflow(self, spec: WorkflowSpec) -> None:
-        """Register one workflow."""
-        self._register(self._workflows, spec.name, spec)
 
     @property
     def robots(self) -> Mapping[str, RobotSpec]:
@@ -114,8 +110,10 @@ class CycloArenaRegistry:
 
     @property
     def workflows(self) -> Mapping[str, WorkflowSpec]:
-        """Return registered workflows as a read-only mapping."""
-        return MappingProxyType(self._workflows)
+        """Return the shared workflow registry for backward compatibility."""
+        from cyclo_arena.core.workflows import WORKFLOWS
+
+        return WORKFLOWS
 
     def compose(self, robot: str, scene: str, task: str) -> CompositionPlan:
         """Validate and compose one robot, scene, and task selection."""

@@ -89,10 +89,23 @@ Select the robot, scene, checkpoint, and initial pose in
 ./scripts/arena/run.sh --list-robots
 ./scripts/arena/run.sh --list-scenes
 ./scripts/arena/run.sh --list-models
+./scripts/arena/run.sh list profiles
+./scripts/arena/run.sh list workflows
 ./docker/container.sh start-groot
 ./docker/container.sh enter
 ./scripts/arena/run.sh
 ```
+
+Reusable scenarios can be launched without knowing a config path:
+
+```bash
+./scripts/arena/run.sh infer ffw_sg2_showroom_gr00t
+./scripts/arena/run.sh plan ffw_sg2_showroom_gr00t
+```
+
+The host resolves the selected profile/config and checkpoint metadata once, then sends an immutable
+manifest into Docker. This keeps host and container model paths, adapters, and runtime options in
+one execution contract.
 
 The launcher composes one generic Arena environment from the selected components; scene-specific
 environment aliases and model-specific Python catalog entries are not required.
@@ -104,6 +117,13 @@ connects to it.
 Use `cyclo-arena list workflows` to see the upstream policy evaluation, batch evaluation,
 teleoperation, demonstration, remote-server, RL-training, and test entry points. Passthrough
 commands preserve Arena's native arguments, for example `cyclo-arena policy --help`.
+
+Initialize the official Arena compatibility gitlink and its matching Isaac Lab dependency without
+recursing into Arena's own development submodules:
+
+```bash
+git submodule update --init third_party/IsaacLab third_party/IsaacLab-Arena
+```
 
 To update the Zenoh ROS2 SDK to a newer stable tag, run the following on the host and replace
 `v0.1.8` with the desired release:

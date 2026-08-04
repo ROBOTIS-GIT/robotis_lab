@@ -15,7 +15,15 @@ model:
   adapter: auto
 ```
 
-Prepare the selected GR00T server on the host, then run inference inside Cyclo Lab:
+Run the editable default configuration from the host:
+
+```bash
+./scripts/arena/run.sh
+```
+
+The host launcher starts Cyclo Lab, prepares the selected GR00T server, and passes one resolved
+manifest into the simulator container. The configuration and checkpoint metadata are not resolved
+a second time inside Docker. The existing explicit preparation flow remains available:
 
 ```bash
 ./docker/container.sh start-groot
@@ -48,9 +56,11 @@ embodiment.
 Inspect valid and discovered selections without starting Isaac Sim:
 
 ```bash
-./scripts/arena/run.sh --list-robots
-./scripts/arena/run.sh --list-scenes
-./scripts/arena/run.sh --list-models
+./scripts/arena/run.sh list robots
+./scripts/arena/run.sh list scenes
+./scripts/arena/run.sh list models
+./scripts/arena/run.sh list profiles
+./scripts/arena/run.sh list workflows
 ./scripts/arena/run.sh --list-poses
 ./scripts/arena/run.sh --list-model-adapters
 ```
@@ -63,5 +73,21 @@ checkpoint's compatible adapter. CLI values override runtime values without edit
 ./scripts/arena/run.sh --dry-run
 ```
 
-Scripts in this directory remain thin entry points. Robot, scene, model-adapter, policy, and
-workflow logic belongs in `source/cyclo_arena`; checkpoint instances remain external files.
+Reusable scenarios live under `source/cyclo_arena/configs/profiles` and are selected by ID, so
+callers do not need to know a YAML path:
+
+```bash
+./scripts/arena/run.sh infer ffw_sg2_showroom_gr00t
+./scripts/arena/run.sh show profile ffw_sg2_showroom_gr00t
+./scripts/arena/run.sh plan ffw_sg2_showroom_gr00t
+./scripts/arena/run.sh validate ffw_sg2_showroom_gr00t
+```
+
+`plan` prints the immutable `ResolvedManifest` used at the host/container boundary. `validate`
+checks robot/scene/task compatibility, checkpoint metadata, embodiment, and model adapter without
+launching Docker or Isaac Sim. `source/cyclo_arena/configs/run.yaml` remains the no-argument,
+heavily commented configuration for local experimentation.
+
+`run.sh` only establishes portable paths and enters the tested Python router. Robot, scene,
+model-adapter, policy, profile, manifest, and workflow logic belongs in
+`source/cyclo_arena`; checkpoint instances remain external files.

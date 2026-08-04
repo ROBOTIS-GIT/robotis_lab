@@ -14,6 +14,8 @@
 #   ./scripts/arena/run.sh --list-models
 #   ./scripts/arena/run.sh --list-poses
 #   ./scripts/arena/run.sh --list-model-adapters
+#   ./scripts/arena/run.sh list profiles
+#   ./scripts/arena/run.sh list workflows
 
 schema_version: 1
 
@@ -177,5 +179,5 @@ runtime:
 #   ./scripts/arena/run.sh --robot-position-xyz 0.0 0.0 0.0 --robot-yaw -1.5708
 #   ./scripts/arena/run.sh --head-position 0.5 0.0 --lift-position -0.2
 #
-# Run `cyclo-arena run --help` inside the container for the complete CLI override
+# Run `cyclo-arena infer --help` inside the container for the complete CLI override
 # list. Explicit CLI values take precedence over this file.
