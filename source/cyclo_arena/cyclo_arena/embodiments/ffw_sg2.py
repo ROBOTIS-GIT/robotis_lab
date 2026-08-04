@@ -98,10 +98,10 @@ class FFWSG2CameraCfg:
 
     cam_head: CameraCfg = make_ffw_sg2_head_camera_cfg(height=480, width=640)
     cam_wrist_left: CameraCfg = make_ffw_sg2_wrist_camera_cfg(
-        "left", height=480, width=640
+        "left", height=640, width=480
     )
     cam_wrist_right: CameraCfg = make_ffw_sg2_wrist_camera_cfg(
-        "right", height=480, width=640
+        "right", height=640, width=480
     )
 
 

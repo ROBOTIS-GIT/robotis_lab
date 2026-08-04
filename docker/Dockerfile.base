@@ -130,6 +130,14 @@ RUN --mount=type=cache,target=${DOCKER_USER_HOME}/.cache/pip \
     ${ISAACLAB_PATH}/isaaclab.sh -p -m pip install -e . && \
     ln -sf ${ISAACSIM_ROOT_PATH}/kit/python/bin/zenoh-ros2 /usr/local/bin/zenoh-ros2
 
+# Keep the GUI-enabled OpenCV wheel isolated from Isaac Sim's headless OpenCV.
+ENV CYCLO_CAMERA_VIEWER_VENV=/opt/cyclo-camera-viewer
+ENV CYCLO_CAMERA_VIEWER_PYTHON=${CYCLO_CAMERA_VIEWER_VENV}/bin/python
+RUN --mount=type=cache,target=${DOCKER_USER_HOME}/.cache/pip \
+    python3 -m venv ${CYCLO_CAMERA_VIEWER_VENV} && \
+    ${CYCLO_CAMERA_VIEWER_PYTHON} -m pip install --upgrade pip && \
+    ${CYCLO_CAMERA_VIEWER_PYTHON} -m pip install "opencv-python==4.11.0.86"
+
 #==
 # Install Cyclo Lab
 #==

@@ -424,7 +424,14 @@ python scripts/sim2real/imitation_learning/inference/inference_demos.py --task C
 
 * Teleop and record demos in Robotis showroom
 ```bash
-python scripts/sim2real/imitation_learning/recorder/record_demos.py --task=Cyclo-Real-Showroom-FFW-SG2-v0 --robot_type FFW_SG2 --dataset_file ./datasets/ffw_sg2_showroom_raw.hdf5 --num_demos 1 --enable_cameras
+python scripts/sim2real/imitation_learning/recorder/record_demos.py \
+    --task Cyclo-Real-Showroom-FFW-SG2-v0 \
+    --robot_type FFW_SG2 \
+    --dataset_file ./datasets/ffw_sg2_showroom_raw.hdf5 \
+    --num_demos 30 \
+    --headless \
+    --enable_cameras \
+    --camera_view operator
 ```
 
 * Data convert Robotis showroom dataset to LeRobot

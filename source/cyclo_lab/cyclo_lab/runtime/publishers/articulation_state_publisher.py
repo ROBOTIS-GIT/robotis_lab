@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 import isaaclab.utils.math as math_utils
+import torch
 
 from cyclo_lab.runtime.transport.ros2_zenoh import (
     JOINT_STATE,
@@ -51,6 +52,12 @@ class ArticulationStatePublisher:
         self._body_names = list(self.robot.data.body_names)
         self.base_body = self._resolve_base_body(base_body)
         self._base_id = self._body_names.index(self.base_body) if self.base_body in self._body_names else None
+        self._tf_body_ids = [
+            body_id
+            for body_id, body_name in enumerate(self._body_names)
+            if body_name not in (self.base_body, self.base_frame)
+        ]
+        self._tf_child_frames = [self._body_names[body_id] for body_id in self._tf_body_ids]
 
         self._odom_origin_pos_w = None
         self._odom_origin_quat_w = None
@@ -104,16 +111,12 @@ class ArticulationStatePublisher:
         self.publish_tf(stamp=stamp)
 
     def publish_joint_states(self, *, stamp=None) -> None:
-        all_positions = self.robot.data.joint_pos.squeeze(0).detach().cpu().tolist()
-        all_velocities = self.robot.data.joint_vel.squeeze(0).detach().cpu().tolist()
-
-        if all_positions and isinstance(all_positions[0], list):
-            all_positions = [position for sub_positions in all_positions for position in sub_positions]
-        if all_velocities and isinstance(all_velocities[0], list):
-            all_velocities = [velocity for sub_velocities in all_velocities for velocity in sub_velocities]
-
-        positions = [all_positions[joint_id] for joint_id in self._published_joint_ids]
-        velocities = [all_velocities[joint_id] for joint_id in self._published_joint_ids]
+        joint_values = self.robot.data.joint_pos[0, self._published_joint_ids]
+        joint_velocities = self.robot.data.joint_vel[0, self._published_joint_ids]
+        state = torch.stack((joint_values, joint_velocities), dim=1)
+        state_cpu = state.detach().cpu().tolist()
+        positions = [joint_state[0] for joint_state in state_cpu]
+        velocities = [joint_state[1] for joint_state in state_cpu]
         efforts = [0.0] * len(self._published_joint_names)
 
         try:
@@ -147,10 +150,19 @@ class ArticulationStatePublisher:
                 root_pos_w,
                 root_quat_w,
             )
-            pos = odom_pos.squeeze(0).detach().cpu().tolist()
-            quat_wxyz = odom_quat.squeeze(0).detach().cpu().tolist()
-            linear_velocity = self.robot.data.root_lin_vel_b[0].detach().cpu().tolist()
-            angular_velocity = self.robot.data.root_ang_vel_b[0].detach().cpu().tolist()
+            odom_state = torch.cat(
+                (
+                    odom_pos[0],
+                    odom_quat[0],
+                    self.robot.data.root_lin_vel_b[0],
+                    self.robot.data.root_ang_vel_b[0],
+                )
+            )
+            odom_state_cpu = odom_state.detach().cpu().tolist()
+            pos = odom_state_cpu[0:3]
+            quat_wxyz = odom_state_cpu[3:7]
+            linear_velocity = odom_state_cpu[7:10]
+            angular_velocity = odom_state_cpu[10:13]
 
             self.odom_writer.publish(
                 **make_odometry_kwargs(
@@ -195,23 +207,20 @@ class ArticulationStatePublisher:
         try:
             body_pose_w = self.robot.data.body_link_state_w[0, :, :7]
             base_pose_w = body_pose_w[self._base_id]
-            base_pos_w = base_pose_w[:3].unsqueeze(0)
-            base_quat_w = base_pose_w[3:7].unsqueeze(0)
+            child_poses_w = body_pose_w[self._tf_body_ids]
+            child_pos_b, child_quat_b = math_utils.subtract_frame_transforms(
+                base_pose_w[:3].expand(len(self._tf_body_ids), -1),
+                base_pose_w[3:7].expand(len(self._tf_body_ids), -1),
+                child_poses_w[:, :3],
+                child_poses_w[:, 3:7],
+            )
+            transforms_b = torch.cat((child_pos_b, child_quat_b), dim=1)
+            transforms_cpu = transforms_b.detach().cpu().tolist()
 
             transforms = []
-            for body_id, child_frame in enumerate(self._body_names):
-                if child_frame in (self.base_body, self.base_frame):
-                    continue
-
-                child_pose_w = body_pose_w[body_id]
-                child_pos_b, child_quat_b = math_utils.subtract_frame_transforms(
-                    base_pos_w,
-                    base_quat_w,
-                    child_pose_w[:3].unsqueeze(0),
-                    child_pose_w[3:7].unsqueeze(0),
-                )
-                pos = child_pos_b.squeeze(0).detach().cpu().tolist()
-                quat_wxyz = child_quat_b.squeeze(0).detach().cpu().tolist()
+            for child_frame, transform_b in zip(self._tf_child_frames, transforms_cpu):
+                pos = transform_b[:3]
+                quat_wxyz = transform_b[3:7]
                 transforms.append(
                     transform_stamped_msg(
                         parent_frame=self.base_frame,

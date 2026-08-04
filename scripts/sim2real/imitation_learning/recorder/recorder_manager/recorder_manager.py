@@ -19,12 +19,14 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
-import torch
 import contextlib
-
 from typing import Sequence
-from isaaclab.managers import RecorderManager, DatasetExportMode
+
+import torch
+
 from isaaclab.envs import ManagerBasedEnv
+from isaaclab.managers import DatasetExportMode, RecorderManager
+from isaaclab.utils.datasets import EpisodeData
 
 from .hdf5_dataset_file_handler import StreamingHDF5DatasetFileHandler, StreamWriteMode
 
@@ -43,6 +45,11 @@ class StreamingRecorderManager(RecorderManager):
         self._compression = None
         self.recording_enabled = True
         self.profiler = None
+        self._owned_cpu_tensor_keys = {
+            key
+            for term_cfg in vars(self.cfg).values()
+            for key in getattr(term_cfg, "owned_cpu_tensor_keys", ())
+        }
         if self._dataset_file_handler is not None:
             self._dataset_file_handler.chunks_length = self._flush_steps
             self._dataset_file_handler.compression = self._compression
@@ -76,6 +83,48 @@ class StreamingRecorderManager(RecorderManager):
         if self.profiler is None:
             return contextlib.nullcontext()
         return self.profiler.time(name)
+
+    def add_to_episodes(self, key, value, env_ids=None):
+        """Add recorder output while exposing per-key buffer costs to the profiler."""
+        should_profile = key is not None and (key == "actions" or key.startswith("obs"))
+        if should_profile:
+            label = f"recorder_buffer_{key.replace('/', '_')}"
+            with self._profile_time(label):
+                return self._add_to_episodes(key, value, env_ids)
+        return self._add_to_episodes(key, value, env_ids)
+
+    def _add_to_episodes(self, key, value, env_ids=None):
+        if len(self.active_terms) == 0 or key is None:
+            return
+        if (
+            key in self._owned_cpu_tensor_keys
+            and torch.is_tensor(value)
+            and value.device.type == "cpu"
+            and value.is_contiguous()
+        ):
+            return self._add_owned_cpu_tensor(key, value, env_ids)
+        return super().add_to_episodes(key, value, env_ids)
+
+    def _add_owned_cpu_tensor(self, key: str, value: torch.Tensor, env_ids=None) -> None:
+        """Transfer fresh CPU tensor storage into episode buffers without cloning it again."""
+        if env_ids is None:
+            env_ids = list(range(self._env.num_envs))
+        elif isinstance(env_ids, torch.Tensor):
+            env_ids = env_ids.tolist()
+
+        for value_index, env_id in enumerate(env_ids):
+            if env_id not in self._episodes:
+                self._episodes[env_id] = EpisodeData()
+                self._episodes[env_id].env_id = env_id
+            self._append_episode_value(self._episodes[env_id], key, value[value_index])
+
+    @staticmethod
+    def _append_episode_value(episode: EpisodeData, key: str, value: torch.Tensor) -> None:
+        data = episode.data
+        key_parts = key.split("/")
+        for key_part in key_parts[:-1]:
+            data = data.setdefault(key_part, {})
+        data.setdefault(key_parts[-1], []).append(value)
 
     def record_pre_step(self) -> None:
         if not self.recording_enabled:

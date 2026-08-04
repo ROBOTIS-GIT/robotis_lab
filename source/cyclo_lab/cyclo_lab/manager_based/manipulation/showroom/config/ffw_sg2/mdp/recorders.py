@@ -28,10 +28,11 @@ def _profile_time(env, name: str):
     return profiler.time(name)
 
 
-def camera_image_cpu(env, sensor_name: str, data_type: str = "rgb") -> torch.Tensor:
+def camera_image_cpu(env, sensor_name: str, data_type: str = "rgb", sensor_data=None) -> torch.Tensor:
     """Read a camera sensor as a CPU uint8 tensor for HDF5 recording."""
-    sensor = env.scene.sensors[sensor_name]
-    images = sensor.data.output[data_type].detach().to(device="cpu", copy=True).contiguous()
+    if sensor_data is None:
+        sensor_data = env.scene.sensors[sensor_name].data
+    images = sensor_data.output[data_type].detach().to(device="cpu", copy=True).contiguous()
 
     if data_type == "rgb" and images.dtype != torch.uint8:
         if images.numel() > 0 and float(images.max()) <= 1.0:
@@ -45,13 +46,31 @@ class PreStepShowroomCameraObservationsRecorder(RecorderTerm):
 
     cfg: "PreStepShowroomCameraObservationsRecorderCfg"
 
+    def __init__(self, cfg, env):
+        super().__init__(cfg, env)
+        self._cached_images: dict[str, torch.Tensor] = {}
+        self._step_count = 0
+
+    def record_post_reset(self, env_ids):
+        self._cached_images.clear()
+        self._step_count = 0
+        return None, None
+
     def record_pre_step(self):
         observations = {}
+        capture_frame = self._step_count % self.cfg.capture_interval_steps == 0
         for camera_name in self.cfg.camera_names:
             if camera_name not in self._env.scene.sensors:
                 continue
             with _profile_time(self._env, f"recorder_camera_{camera_name}"):
-                observations[camera_name] = camera_image_cpu(self._env, camera_name)
+                image = self._cached_images.get(camera_name)
+                if capture_frame or image is None:
+                    sensor_data = self._env.scene.sensors[camera_name].data
+                    with _profile_time(self._env, f"recorder_camera_copy_{camera_name}"):
+                        image = camera_image_cpu(self._env, camera_name, sensor_data=sensor_data)
+                    self._cached_images[camera_name] = image
+                observations[camera_name] = image
+        self._step_count += 1
         return "obs", observations
 
 
@@ -61,6 +80,8 @@ class PreStepShowroomCameraObservationsRecorderCfg(RecorderTermCfg):
 
     class_type: type[RecorderTerm] = PreStepShowroomCameraObservationsRecorder
     camera_names: tuple[str, ...] = SHOWROOM_CAMERA_NAMES
+    capture_interval_steps: int = 2
+    owned_cpu_tensor_keys: tuple[str, ...] = tuple(f"obs/{name}" for name in SHOWROOM_CAMERA_NAMES)
 
 
 @configclass

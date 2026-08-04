@@ -83,21 +83,21 @@ ROBOT_CONFIGS = {
 }
 
 
-def _ffw_sg2_showroom_action_to_lerobot(actions: np.ndarray) -> np.ndarray:
-    """Convert showroom env actions into the WoodBlock LeRobot SG2 order."""
-    if actions.ndim != 2 or actions.shape[1] != 22:
-        raise ValueError(f"FFW_SG2_SHOWROOM actions must have shape [N, 22], got {tuple(actions.shape)}.")
+def _ffw_sg2_action_to_lerobot(actions: np.ndarray) -> np.ndarray:
+    """Convert Isaac Lab SG2 actions into the published/LeRobot joint order."""
+    if actions.ndim != 2 or actions.shape[1] not in (19, 22):
+        raise ValueError(f"FFW_SG2 actions must have shape [N, 19] or [N, 22], got {tuple(actions.shape)}.")
 
     # HDF5 actions follow Isaac Lab action-term order:
-    # [arm_l, gripper_l, arm_r, gripper_r, lift, head(2), base_cmd(3)].
+    # [arm_l, gripper_l, arm_r, gripper_r, lift, head(2), optional base_cmd(3)].
     # WoodBlock LeRobot datasets use:
-    # [arm_l, gripper_l, arm_r, gripper_r, head(2), lift, base_cmd(3)].
+    # [arm_l, gripper_l, arm_r, gripper_r, head(2), lift, optional base_cmd(3)].
     return np.concatenate(
         [
             actions[:, :16],
             actions[:, 17:19],
             actions[:, 16:17],
-            actions[:, 19:22],
+            actions[:, 19:],
         ],
         axis=-1,
     )
@@ -316,8 +316,8 @@ def process_data(
         actions = actions.reshape(-1, action_dim)
     if joint_pos.ndim == 1:
         joint_pos = joint_pos.reshape(-1, state_dim)
-    if robot_type == "FFW_SG2_SHOWROOM":
-        actions = _ffw_sg2_showroom_action_to_lerobot(actions)
+    if robot_type in ("FFW_SG2", "FFW_SG2_SHOWROOM"):
+        actions = _ffw_sg2_action_to_lerobot(actions)
     
     total_state_frames = actions.shape[0]
 

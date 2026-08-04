@@ -163,6 +163,9 @@ class ShowroomSceneCfg(InteractiveSceneCfg):
     cam_head: CameraCfg = MISSING
     cam_wrist_left: CameraCfg = MISSING
     cam_wrist_right: CameraCfg = MISSING
+    cam_overhead_left: CameraCfg | None = None
+    cam_overhead_center: CameraCfg | None = None
+    cam_overhead_right: CameraCfg | None = None
 
     ground = AssetBaseCfg(
         prim_path="/World/GroundPlane",
@@ -244,6 +247,10 @@ class ShowroomEnvCfg(ManagerBasedRLEnvCfg):
     """Base SG2 showroom env used by task-specific HDF5 collection configs."""
 
     env_name: str = "Cyclo-Real-Showroom-FFW-SG2-v0"
+    recording_control_hz: float = 15.0
+    recording_physics_hz: float = 30.0
+    camera_render_hz: float = 15.0
+    camera_capture_interval_steps: int = 2
     scene: ShowroomSceneCfg = ShowroomSceneCfg(num_envs=1, env_spacing=8.0, replicate_physics=False)
     observations: ObservationsCfg = ObservationsCfg()
     actions: ActionsCfg = ActionsCfg()
@@ -255,10 +262,30 @@ class ShowroomEnvCfg(ManagerBasedRLEnvCfg):
     curriculum: CurriculumCfg = CurriculumCfg()
 
     def __post_init__(self):
-        self.decimation = 2
+        if min(self.recording_control_hz, self.recording_physics_hz, self.camera_render_hz) <= 0.0:
+            raise ValueError("Recording control, physics, and camera rates must be positive.")
+        if self.recording_physics_hz < self.recording_control_hz:
+            raise ValueError("Recording physics rate must be greater than or equal to the control rate.")
+        if self.recording_physics_hz < self.camera_render_hz:
+            raise ValueError("Recording physics rate must be greater than or equal to the camera render rate.")
+
+        physics_steps_per_control = self.recording_physics_hz / self.recording_control_hz
+        physics_steps_per_render = self.recording_physics_hz / self.camera_render_hz
+        control_steps_per_capture = self.recording_control_hz / self.camera_render_hz
+        for name, ratio in (
+            ("physics/control", physics_steps_per_control),
+            ("physics/render", physics_steps_per_render),
+            ("control/camera", control_steps_per_capture),
+        ):
+            if not ratio.is_integer():
+                raise ValueError(f"Showroom recording rate ratio {name} must be an integer, got {ratio}.")
+
+        self.decimation = int(physics_steps_per_control)
         self.episode_length_s = 120.0
-        self.sim.dt = 1.0 / 60.0
-        self.sim.render_interval = 2
+        self.sim.dt = 1.0 / self.recording_physics_hz
+        self.sim.render_interval = int(physics_steps_per_render)
+        self.camera_capture_interval_steps = int(control_steps_per_capture)
+        self.recorders.record_pre_step_camera_observations.capture_interval_steps = self.camera_capture_interval_steps
         self.sim.physx.bounce_threshold_velocity = 0.01
         self.sim.physx.gpu_found_lost_aggregate_pairs_capacity = 1024 * 1024 * 4
         self.sim.physx.gpu_total_aggregate_pairs_capacity = 16 * 1024
@@ -287,15 +314,6 @@ class ShowroomEnvCfg(ManagerBasedRLEnvCfg):
             self.recorders.record_pre_step_camera_observations.camera_names = tuple(camera_names)
         else:
             self.recorders.record_pre_step_camera_observations = None
-
-    def set_camera_resolution(self, width: int, height: int):
-        """Set all enabled showroom camera sensors to the same resolution."""
-        for camera_name in SHOWROOM_CAMERA_NAMES:
-            camera_cfg = getattr(self.scene, camera_name, None)
-            if camera_cfg is None:
-                continue
-            camera_cfg.width = int(width)
-            camera_cfg.height = int(height)
 
     def init_action_cfg(self, mode: str):
         if mode not in ("record", "inference"):

@@ -38,7 +38,12 @@ parser.add_argument("--task", type=str, default=None, help="Name of the task.")
 parser.add_argument("--seed", type=int, default=42, help="Seed for the environment.")
 
 # recorder_parameter
-parser.add_argument("--step_hz", type=int, default=60, help="Environment stepping rate in Hz.")
+parser.add_argument(
+    "--step_hz",
+    type=float,
+    default=None,
+    help="Environment stepping rate in Hz. Uses the task recording rate, or 60 Hz when unspecified.",
+)
 parser.add_argument("--dataset_file", type=str, default="./datasets/dataset.hdf5", help="File path to export recorded demos.")
 parser.add_argument("--num_demos", type=int, default=0, help="Number of demonstrations to record. Set to 0 for infinite.")
 parser.add_argument("--flush_steps", type=int, default=30, help="Streaming HDF5 flush interval in environment steps.")
@@ -50,10 +55,11 @@ parser.add_argument(
     help="Camera sensors to record when the task supports camera subsets.",
 )
 parser.add_argument(
-    "--camera_size",
-    type=int,
-    default=0,
-    help="Square camera resolution for tasks that support camera resizing. Use 0 for task defaults.",
+    "--camera_view",
+    type=str,
+    default="none",
+    choices=("none", "operator"),
+    help="Show one operator dashboard with external, head, and wrist cameras.",
 )
 parser.add_argument(
     "--publish_camera_topics",
@@ -86,6 +92,8 @@ parser.add_argument(
 AppLauncher.add_app_launcher_args(parser)
 # parse the arguments
 args_cli = parser.parse_args()
+if args_cli.camera_view != "none":
+    args_cli.enable_cameras = True
 
 app_launcher_args = vars(args_cli)
 
@@ -99,7 +107,7 @@ import gymnasium as gym
 
 from isaaclab.envs import ManagerBasedRLEnv
 from isaaclab_tasks.utils import parse_env_cfg
-from isaaclab.managers import TerminationTermCfg, DatasetExportMode
+from isaaclab.managers import DatasetExportMode, RecorderTerm, TerminationTermCfg
 
 import cyclo_lab
 import os
@@ -107,26 +115,25 @@ import os
 from recorder_manager.recorder_manager import StreamingRecorderManager
 
 class RateLimiter:
-    """Convenience class for enforcing rates in loops."""
+    """Keep a fixed loop schedule while allowing short overruns to catch up."""
 
-    def __init__(self, hz):
-        """
-        Args:
-            hz (int): frequency to enforce
-        """
+    def __init__(self, hz: float):
+        if hz <= 0.0:
+            raise ValueError(f"Rate must be positive, got {hz} Hz.")
         self.hz = hz
-        self.last_time = time.time()
         self.sleep_duration = 1.0 / hz
+        self.next_wakeup_time = time.perf_counter() + self.sleep_duration
 
     def sleep(self):
-        """Attempt to sleep at the specified rate in hz."""
-        next_wakeup_time = self.last_time + self.sleep_duration
-        sleep_time = next_wakeup_time - time.time()
+        """Sleep until the next deadline without discarding a one-cycle overrun."""
+        sleep_time = self.next_wakeup_time - time.perf_counter()
         if sleep_time > 0.0:
             time.sleep(sleep_time)
-            self.last_time = next_wakeup_time
-        else:
-            self.last_time = time.time()
+
+        now = time.perf_counter()
+        self.next_wakeup_time += self.sleep_duration
+        if now - self.next_wakeup_time > self.sleep_duration:
+            self.next_wakeup_time = now + self.sleep_duration
 
 
 class LoopProfiler:
@@ -139,6 +146,7 @@ class LoopProfiler:
         self.loop_count = 0
         self._window_start = time.perf_counter()
         self._stats = defaultdict(lambda: {"count": 0, "total": 0.0, "max": 0.0})
+        self._installed_hooks = []
 
     def _sync(self):
         if self.cuda_sync and torch.cuda.is_available():
@@ -194,6 +202,19 @@ class LoopProfiler:
         self._stats.clear()
         self._window_start = now
 
+    def register_hook(self, obj, method_name: str, original) -> None:
+        """Track an instance-method hook so object lifetimes are restored before shutdown."""
+        self._installed_hooks.append((obj, method_name, original))
+
+    def remove_hooks(self) -> None:
+        """Restore methods wrapped for profiling and release bound-method references."""
+        for obj, method_name, original in reversed(self._installed_hooks):
+            try:
+                setattr(obj, method_name, original)
+            except Exception as exc:
+                print(f"[PROFILE] Failed to remove hook for {method_name}: {exc}")
+        self._installed_hooks.clear()
+
 
 def install_profile_hook(obj, method_name: str, label: str, profiler: LoopProfiler):
     """Wrap an instance method with a profiler timer."""
@@ -210,6 +231,7 @@ def install_profile_hook(obj, method_name: str, label: str, profiler: LoopProfil
     wrapped._cyclo_profile_wrapped = True
     try:
         setattr(obj, method_name, wrapped)
+        profiler.register_hook(obj, method_name, original)
     except Exception as exc:
         print(f"[PROFILE] Failed to install hook for {label}: {exc}")
 
@@ -228,6 +250,107 @@ def install_env_profile_hooks(env, profiler: LoopProfiler):
     install_profile_hook(env.sim, "render", "isaaclab_sim_render", profiler)
 
 
+def install_recorder_term_profile_hooks(recorder_manager, profiler: LoopProfiler):
+    """Install timing hooks for each active recorder term and phase."""
+    for term_name, term in getattr(recorder_manager, "_terms", {}).items():
+        for phase in ("pre_step", "post_step", "post_physics_decimation_step"):
+            method_name = f"record_{phase}"
+            if getattr(type(term), method_name) is getattr(RecorderTerm, method_name):
+                continue
+            install_profile_hook(
+                term,
+                method_name,
+                f"recorder_term_{term_name}_{phase}",
+                profiler,
+            )
+
+
+def release_camera_sensors_before_close(env) -> None:
+    """Detach camera annotators before Isaac Sim starts clearing simulation callbacks."""
+    for sensor in getattr(env.scene, "sensors", {}).values():
+        registry = getattr(sensor, "_rep_registry", None)
+        if registry is None:
+            continue
+        try:
+            sensor.__del__()
+        except Exception as exc:
+            print(f"[WARN] Failed to detach camera sensor during shutdown: {exc}")
+        finally:
+            registry.clear()
+
+
+def _camera_rgb(env, camera_name: str) -> torch.Tensor:
+    """Return one camera's first RGB image without copying it off the GPU."""
+    image = env.scene.sensors[camera_name].data.output["rgb"]
+    if image.ndim == 4:
+        image = image[0]
+    return image[..., :3]
+
+
+def _make_operator_dashboard(env, gap: int = 8):
+    """Allocate a reusable native-resolution dashboard and its panel layout."""
+    rows = (
+        (
+            ("cam_overhead_left", "External Left"),
+            ("cam_overhead_center", "External Top"),
+            ("cam_overhead_right", "External Right"),
+        ),
+        (("cam_wrist_left", "Wrist Left"), ("cam_head", "Head"), ("cam_wrist_right", "Wrist Right")),
+    )
+    panel_sizes = {}
+    first_image = None
+    for row in rows:
+        for camera_name, _ in row:
+            image = _camera_rgb(env, camera_name)
+            if first_image is None:
+                first_image = image
+            elif image.device != first_image.device or image.dtype != first_image.dtype:
+                raise ValueError("Operator dashboard cameras must use the same device and pixel dtype.")
+            panel_sizes[camera_name] = (int(image.shape[1]), int(image.shape[0]))
+
+    row_widths = [
+        sum(panel_sizes[camera_name][0] for camera_name, _ in row) + gap * (len(row) - 1)
+        for row in rows
+    ]
+    row_heights = [max(panel_sizes[camera_name][1] for camera_name, _ in row) for row in rows]
+    canvas_width = max(row_widths)
+    canvas_height = sum(row_heights) + gap * (len(rows) - 1)
+    background = 18 if not first_image.dtype.is_floating_point else 18.0 / 255.0
+    canvas = torch.full(
+        (canvas_height, canvas_width, 3),
+        background,
+        dtype=first_image.dtype,
+        device=first_image.device,
+    )
+
+    layout = {}
+    labels = []
+    row_y = 0
+    for row, row_width, row_height in zip(rows, row_widths, row_heights):
+        panel_x = (canvas_width - row_width) // 2
+        for camera_name, label in row:
+            panel_width, panel_height = panel_sizes[camera_name]
+            panel_y = row_y + (row_height - panel_height) // 2
+            layout[camera_name] = (panel_x, panel_y, panel_width, panel_height)
+            labels.append((label, panel_x, panel_y))
+            panel_x += panel_width + gap
+        row_y += row_height + gap
+
+    return canvas, layout, tuple(labels)
+
+
+def _update_operator_dashboard(env, canvas: torch.Tensor, layout) -> None:
+    """Place the latest camera tensors into the cached dashboard canvas."""
+    for camera_name, (panel_x, panel_y, panel_width, panel_height) in layout.items():
+        image = _camera_rgb(env, camera_name)
+        if image.shape[:2] != (panel_height, panel_width):
+            raise ValueError(
+                f"Camera {camera_name} changed size from {panel_width}x{panel_height} "
+                f"to {image.shape[1]}x{image.shape[0]}."
+            )
+        canvas[panel_y : panel_y + panel_height, panel_x : panel_x + panel_width].copy_(image)
+
+
 def main():
     """Running cyclo_lab teleoperation with cyclo_lab manipulation environment."""
 
@@ -244,11 +367,22 @@ def main():
         env_cfg.set_camera_set(args_cli.camera_set)
     elif args_cli.camera_set != "all":
         print(f"[WARN] Task {args_cli.task} does not support --camera_set; using its default cameras.")
-    if args_cli.camera_size > 0:
-        if hasattr(env_cfg, "set_camera_resolution"):
-            env_cfg.set_camera_resolution(args_cli.camera_size, args_cli.camera_size)
-        else:
-            print(f"[WARN] Task {args_cli.task} does not support --camera_size; using its default resolution.")
+    if args_cli.camera_view == "operator":
+        if not hasattr(env_cfg, "enable_operator_preview_cameras"):
+            raise ValueError(f"Task {args_cli.task} does not support the operator camera dashboard.")
+        env_cfg.enable_operator_preview_cameras()
+        required_operator_cameras = ("cam_head", "cam_wrist_left", "cam_wrist_right")
+        missing_operator_cameras = [
+            camera_name
+            for camera_name in required_operator_cameras
+            if getattr(env_cfg.scene, camera_name, None) is None
+        ]
+        if missing_operator_cameras:
+            raise ValueError(
+                "--camera_view operator requires --camera_set all; missing "
+                + ", ".join(missing_operator_cameras)
+                + "."
+            )
     env_cfg.seed = args_cli.seed
     task_name = args_cli.task
 
@@ -284,6 +418,7 @@ def main():
     )
     env.recorder_manager.profiler = profiler
     install_env_profile_hooks(env, profiler)
+    install_recorder_term_profile_hooks(env.recorder_manager, profiler)
 
     # create controller
     if args_cli.robot_type == "OMY":
@@ -336,11 +471,38 @@ def main():
     teleop_interface.add_callback("R", reset_recording_instance)
     teleop_interface.add_callback("N", reset_task_success)
 
-    rate_limiter = RateLimiter(args_cli.step_hz)
+    target_step_hz = args_cli.step_hz
+    if target_step_hz is None:
+        target_step_hz = getattr(env_cfg, "recording_control_hz", 60.0)
+    rate_limiter = RateLimiter(target_step_hz)
 
     # reset environment
     env.reset()
     teleop_interface.reset()
+
+    operator_dashboard_preview = None
+    operator_dashboard_frame = None
+    operator_dashboard_layout = None
+    preview_step_count = 0
+    preview_capture_interval = int(getattr(env_cfg, "camera_capture_interval_steps", 1))
+    if args_cli.camera_view == "operator":
+        from cyclo_lab.runtime.viewers import SharedMemoryCameraPreview
+
+        operator_dashboard_frame, operator_dashboard_layout, panel_labels = _make_operator_dashboard(env)
+        dashboard_height, dashboard_width = operator_dashboard_frame.shape[:2]
+        operator_dashboard_preview = SharedMemoryCameraPreview(
+            width=dashboard_width,
+            height=dashboard_height,
+            window_title="SG2 Operator Dashboard",
+            window_size=min(dashboard_width, 1800),
+            window_position=(20, 20),
+            panel_labels=panel_labels,
+        )
+        print(
+            f"[Camera Preview] operator dashboard {dashboard_width}x{dashboard_height}: "
+            "external left/top/right + wrist left/head/wrist right "
+            f"at {getattr(env_cfg, 'camera_render_hz', 0.0):g} Hz"
+        )
 
     current_recorded_demo_count = 0
 
@@ -436,12 +598,27 @@ def main():
                             actions = actions.unsqueeze(0)
                         with profiler.time("env_step"):
                             env.step(actions)
+                if preview_step_count % preview_capture_interval == 0:
+                    if operator_dashboard_preview is not None:
+                        with profiler.time("camera_preview_dashboard"):
+                            _update_operator_dashboard(
+                                env,
+                                operator_dashboard_frame,
+                                operator_dashboard_layout,
+                            )
+                            operator_dashboard_preview.update(operator_dashboard_frame)
+                preview_step_count += 1
                 if rate_limiter:
                     with profiler.time("rate_sleep"):
                         rate_limiter.sleep()
         profiler.tick()
 
     # close the simulator
+    teleop_interface.shutdown()
+    if operator_dashboard_preview is not None:
+        operator_dashboard_preview.close()
+    profiler.remove_hooks()
+    release_camera_sensors_before_close(env)
     env.close()
     simulation_app.close()
 
