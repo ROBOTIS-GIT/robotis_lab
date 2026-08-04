@@ -72,6 +72,11 @@ class WorkflowRegistryTest(unittest.TestCase):
             WORKFLOWS["infer"].upstream_target,
             "isaaclab_arena.evaluation.policy_runner",
         )
+        self.assertEqual(
+            WORKFLOWS["infer"].launcher_target,
+            "cyclo_arena.compat.policy_runner",
+        )
+        self.assertEqual(WORKFLOWS["infer"].executable_target, "cyclo_arena.compat.policy_runner")
         self.assertEqual(WORKFLOWS["rl-train"].kind, WorkflowKind.SCRIPT)
         self.assertEqual(WORKFLOWS["gr00t-server"].kind, WorkflowKind.SHELL)
         self.assertEqual(

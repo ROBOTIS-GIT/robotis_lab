@@ -67,7 +67,7 @@ class CliTest(unittest.TestCase):
 
         command = output.getvalue()
         self.assertEqual(result, 0)
-        self.assertIn("isaaclab_arena.evaluation.policy_runner", command)
+        self.assertIn("cyclo_arena.compat.policy_runner", command)
         self.assertIn("CycloArenaEnvironment", command)
         self.assertIn("cyclo_composed --robot ffw_sg2 --scene galileo", command)
         self.assertIn("--num_steps 2", command)
@@ -136,6 +136,12 @@ class CliTest(unittest.TestCase):
 
         self.assertEqual(result, 0)
         execute.assert_called_once_with(cli.PASSTHROUGH_WORKFLOWS["policy"], ["--help"])
+
+    def test_inference_keeps_the_official_upstream_target_behind_the_adapter(self):
+        infer = cli.PASSTHROUGH_WORKFLOWS["infer"]
+
+        self.assertEqual(infer.upstream_target, "isaaclab_arena.evaluation.policy_runner")
+        self.assertEqual(infer.launcher_target, "cyclo_arena.compat.policy_runner")
 
     def test_infer_accepts_a_named_profile_without_a_config_path(self):
         manifest = ResolvedManifest(

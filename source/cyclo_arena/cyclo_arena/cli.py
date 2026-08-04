@@ -52,15 +52,15 @@ def _python_launcher() -> str:
     return sys.executable
 
 
-def _exec_workflow(target: WorkflowSpec, forwarded_args: Sequence[str]) -> None:
-    """Replace this process with an upstream Arena workflow."""
+def _workflow_command(target: WorkflowSpec, forwarded_args: Sequence[str]) -> list[str]:
+    """Build the executable command for one upstream Arena workflow."""
     assert target.is_supported, target.readiness_detail
     assert target.upstream_target is not None
     workflow_args = list(forwarded_args) or list(target.default_args)
     if target.kind is WorkflowKind.MODULE:
-        command = [_python_launcher(), "-m", target.upstream_target, *workflow_args]
+        command = [_python_launcher(), "-m", target.executable_target, *workflow_args]
     else:
-        target_path = REPOSITORY_ROOT / target.upstream_target
+        target_path = REPOSITORY_ROOT / target.executable_target
         if not target_path.is_file():
             raise FileNotFoundError(
                 f"Workflow target is unavailable: {target_path}. "
@@ -72,6 +72,12 @@ def _exec_workflow(target: WorkflowSpec, forwarded_args: Sequence[str]) -> None:
             command = ["bash", str(target_path), *workflow_args]
         else:
             raise ValueError(f"Unsupported workflow target kind: {target.kind}")
+    return command
+
+
+def _exec_workflow(target: WorkflowSpec, forwarded_args: Sequence[str]) -> None:
+    """Replace this process with an upstream Arena workflow."""
+    command = _workflow_command(target, forwarded_args)
     os.execv(command[0], command)
 
 
@@ -486,9 +492,7 @@ def _run_environment(args: argparse.Namespace) -> int:
     forwarded += ["--kitchen_style", str(args.kitchen_style)]
     target = WORKFLOWS["infer"]
     if args.dry_run:
-        assert target.upstream_target is not None
-        command = [_python_launcher(), "-m", target.upstream_target, *forwarded]
-        print(shlex.join(command))
+        print(shlex.join(_workflow_command(target, forwarded)))
         return 0
     _exec_workflow(target, forwarded)
     return 0

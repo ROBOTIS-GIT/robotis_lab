@@ -60,6 +60,8 @@ class WorkflowSpec:
     description: str
     kind: WorkflowKind
     upstream_target: str | None
+    launcher_target: str | None = None
+    """Optional Cyclo-owned adapter target used to launch the upstream workflow."""
     aliases: tuple[str, ...] = ()
     default_args: tuple[str, ...] = ()
     requirements: tuple[WorkflowRequirement, ...] = ()
@@ -80,9 +82,14 @@ class WorkflowSpec:
         ), f"Workflow {self.name!r} contains duplicate requirements"
         if self.readiness is WorkflowReadiness.UNSUPPORTED:
             assert self.upstream_target is None, "Unsupported workflows must not expose a launch target"
+            assert self.launcher_target is None, "Unsupported workflows must not expose a launcher target"
             assert self.readiness_detail, "Unsupported workflows must explain why they are unavailable"
         else:
             assert self.upstream_target, f"Workflow {self.name!r} has no upstream target"
+        if self.launcher_target is not None:
+            assert (
+                self.launcher_target and not self.launcher_target.isspace()
+            ), "Workflow launcher target must not be empty"
         if self.readiness is WorkflowReadiness.REQUIRES_SETUP:
             assert self.readiness_detail, "Workflows requiring setup must describe the missing setup"
 
@@ -95,6 +102,13 @@ class WorkflowSpec:
     def is_ready(self) -> bool:
         """Return whether the workflow needs no integration-specific setup."""
         return self.readiness is WorkflowReadiness.READY
+
+    @property
+    def executable_target(self) -> str:
+        """Return the Cyclo adapter target or the original upstream target."""
+        target = self.launcher_target or self.upstream_target
+        assert target is not None, f"Workflow {self.name!r} has no executable target"
+        return target
 
 
 class WorkflowRegistry(Mapping[str, WorkflowSpec]):
@@ -182,6 +196,7 @@ WORKFLOWS = WorkflowRegistry((
         description="Run one policy in one Arena environment.",
         kind=WorkflowKind.MODULE,
         upstream_target="isaaclab_arena.evaluation.policy_runner",
+        launcher_target="cyclo_arena.compat.policy_runner",
         aliases=("run", "inference", "policy"),
         requirements=(_COMPOSED_ENVIRONMENT, _POLICY_RUNTIME),
     ),
