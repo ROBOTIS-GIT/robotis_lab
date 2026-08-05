@@ -83,5 +83,5 @@ third_party/*
 # Zenoh ROS2 SDK message cache mounted into Docker
 docker/zenoh_cache/
 
-# Local model workspace mounted into Cyclo Lab and model-server containers
-docker/workspace/model/
+# Local model workspace mounted into Cyclo Lab and model-server containers.
+# Its contents are excluded by docker/workspace/model/.gitignore.

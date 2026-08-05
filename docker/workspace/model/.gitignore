@@ -1,0 +1,3 @@
+# Keep this mount point in Git while excluding local checkpoints and runtime state.
+*
+!.gitignore
