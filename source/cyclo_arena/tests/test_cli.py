@@ -24,7 +24,8 @@ from unittest import mock
 
 from cyclo_arena import cli
 from cyclo_arena.catalog import REGISTRY
-from cyclo_arena.core.manifest import ResolvedManifest
+from cyclo_arena.core.manifest import ManifestModel, ResolvedManifest
+from cyclo_arena.core.profile_store import DEFAULT_PROFILE_ID, ProfileStore
 
 
 class CliTest(unittest.TestCase):
@@ -41,6 +42,28 @@ class CliTest(unittest.TestCase):
             "--policy-type",
             "zero_action",
         ]
+
+    @staticmethod
+    def _model_manifest(remote_port: int | None = None) -> ResolvedManifest:
+        return ResolvedManifest(
+            workflow="infer",
+            profile="demo",
+            model=ManifestModel(
+                checkpoint=Path("/models/showroom_groot"),
+                adapter="ffw_sg2_gr00t_n17_showroom",
+                model_type="Gr00tN1d7",
+            ),
+            run_values={
+                "robot": "ffw_sg2",
+                "scene": "robotis_showroom_training",
+                "task": "scene_only",
+                "embodiment": "ffw_sg2_mobile_abs_joint_pos",
+                "policy_type": "isaaclab_arena.policy.action_chunking_client.ActionChunkingClientSidePolicy",
+                "remote_host": "127.0.0.1",
+                "remote_port": remote_port,
+                "enable_cameras": True,
+            },
+        )
 
     def test_run_dry_run_builds_composed_environment_command(self):
         output = io.StringIO()
@@ -110,7 +133,7 @@ class CliTest(unittest.TestCase):
         self.assertIn("--kitchen_style 7", command)
 
     def test_checkpoint_config_uses_resolved_adapter_and_robot_pose(self):
-        config_path = Path(__file__).resolve().parents[1] / "configs" / "run.yaml"
+        config_path = ProfileStore().get(DEFAULT_PROFILE_ID).path
         output = io.StringIO()
         with contextlib.redirect_stdout(output):
             result = cli.main([
@@ -167,13 +190,63 @@ class CliTest(unittest.TestCase):
         )
         self.assertIn("--scene galileo", output.getvalue())
 
+    def test_dry_run_does_not_require_prepared_server_state(self):
+        manifest = self._model_manifest()
+        output = io.StringIO()
+        with mock.patch.object(cli, "_resolve_manifest_source", return_value=manifest), mock.patch.object(
+            cli,
+            "load_server_port",
+        ) as load_server_port, contextlib.redirect_stdout(output):
+            result = cli.main(["infer", "demo", "--dry-run"])
+
+        self.assertEqual(result, 0)
+        load_server_port.assert_not_called()
+        self.assertNotIn("--remote_port", output.getvalue())
+
+    def test_inference_loads_server_state_only_when_port_is_missing(self):
+        manifest = self._model_manifest()
+        with mock.patch.object(cli, "_resolve_manifest_source", return_value=manifest), mock.patch.object(
+            cli,
+            "load_server_port",
+            return_value=61234,
+        ) as load_server_port, mock.patch.object(cli, "_exec_workflow") as execute:
+            result = cli.main(["infer", "demo"])
+
+        self.assertEqual(result, 0)
+        load_server_port.assert_called_once_with(manifest.model.to_resolved_model(REGISTRY))
+        forwarded = execute.call_args.args[1]
+        self.assertIn("--remote_port", forwarded)
+        self.assertEqual(forwarded[forwarded.index("--remote_port") + 1], "61234")
+
+    def test_manifest_or_cli_port_bypasses_server_state(self):
+        cases = (
+            (self._model_manifest(remote_port=5555), ["infer", "demo"]),
+            (self._model_manifest(), ["infer", "demo", "--remote-port", "62000"]),
+        )
+        for manifest, arguments in cases:
+            with self.subTest(arguments=arguments), mock.patch.object(
+                cli,
+                "_resolve_manifest_source",
+                return_value=manifest,
+            ), mock.patch.object(cli, "load_server_port") as load_server_port, mock.patch.object(
+                cli,
+                "_exec_workflow",
+            ) as execute:
+                result = cli.main(arguments)
+
+            self.assertEqual(result, 0)
+            load_server_port.assert_not_called()
+            forwarded = execute.call_args.args[1]
+            expected_port = "62000" if "--remote-port" in arguments else "5555"
+            self.assertEqual(forwarded[forwarded.index("--remote_port") + 1], expected_port)
+
     def test_profile_catalog_is_available_without_isaac_sim(self):
         output = io.StringIO()
         with contextlib.redirect_stdout(output):
             result = cli.main(["list", "profiles"])
 
         self.assertEqual(result, 0)
-        self.assertIn("ffw_sg2_showroom_gr00t", output.getvalue())
+        self.assertIn("ffw_sg2_gr00t", output.getvalue())
 
 
 if __name__ == "__main__":

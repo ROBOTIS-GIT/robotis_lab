@@ -11,22 +11,29 @@ workflow registry describes upstream Arena capabilities and their readiness; and
 `ResolvedManifest` is the only execution plan passed from the host into Docker. Runtime adapters
 create Isaac Lab objects only after Isaac Sim starts.
 
-For a one-command inference run, select `robot`, `scene`, and a downloaded checkpoint in
-`configs/run.yaml`, prepare its model server on the host, then launch inside Cyclo Lab:
+For a one-command inference run, select the robot, scene, downloaded checkpoint, language, and
+runtime in `configs/profiles/ffw_sg2_gr00t.yaml`, then launch from the Cyclo Lab host:
 
 ```bash
-./docker/container.sh start-groot
-./docker/container.sh enter
 ./scripts/arena/run.sh
 ```
 
-For a reusable named scenario, no source path is required:
+The launcher uses `ffw_sg2_gr00t` by default and automatically prepares both containers. Robot
+joint values are kept separately in `configs/robots/ffw_sg2/poses/showroom.yaml`, selected through
+the profile's `robot.initial_pose` field. These are the only two YAML locations required for normal
+FFW-SG2 inference setup.
+
+Named profiles do not require a source path:
 
 ```bash
 ./scripts/arena/run.sh list profiles
-./scripts/arena/run.sh infer ffw_sg2_showroom_gr00t
-./scripts/arena/run.sh plan ffw_sg2_showroom_gr00t
+./scripts/arena/run.sh infer ffw_sg2_gr00t
+./scripts/arena/run.sh plan ffw_sg2_gr00t
 ```
+
+For advanced use, `./docker/container.sh start-groot` prewarms the default profile's model server,
+`./docker/container.sh start-groot --rebuild` rebuilds it, and
+`./scripts/arena/run.sh --config /path/to/experiment.yaml` runs an external configuration.
 
 The host command accepts `Gr00tN1d7`, builds the pinned GR00T N1.7 runtime when needed, and
 prepares a checkpoint-specific server. Both sides use Arena's native remote-policy
@@ -60,13 +67,13 @@ official URL/branch and requires each initialized checkout to match the SHA pinn
 The launcher records the mounted Arena revision and recreates the disposable model-server
 container when that revision changes. Checkpoint data remains in `docker/workspace/model`.
 
-Use the component catalogs to inspect the available composition surface:
+From the host, use the component catalogs to inspect the available composition surface:
 
 ```bash
-cyclo-arena list robots
-cyclo-arena list scenes
-cyclo-arena list tasks
-cyclo-arena list models
-cyclo-arena list profiles
-cyclo-arena list workflows
+./scripts/arena/run.sh list robots
+./scripts/arena/run.sh list scenes
+./scripts/arena/run.sh list tasks
+./scripts/arena/run.sh list models
+./scripts/arena/run.sh list profiles
+./scripts/arena/run.sh list workflows
 ```

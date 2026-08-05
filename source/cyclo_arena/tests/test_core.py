@@ -21,7 +21,8 @@ from dataclasses import replace
 from pathlib import Path
 
 from cyclo_arena.catalog import REGISTRY
-from cyclo_arena.core.config import RunConfig, load_run_config
+from cyclo_arena.core.config import RunConfig
+from cyclo_arena.core.profile_store import DEFAULT_PROFILE_ID, ProfileStore
 
 
 class RegistryTest(unittest.TestCase):
@@ -76,10 +77,8 @@ class RunConfigTest(unittest.TestCase):
                 "scene": {"name": "galileo"},
             })
 
-    def test_default_run_selects_robot_scene_and_model(self):
-        config_path = Path(__file__).resolve().parents[1] / "configs" / "run.yaml"
-
-        config = load_run_config(config_path)
+    def test_default_profile_selects_robot_scene_and_model(self):
+        config = ProfileStore().load(DEFAULT_PROFILE_ID)
         values = config.to_run_values(
             REGISTRY,
             model_adapter_override="ffw_sg2_gr00t_n17_showroom",
@@ -96,8 +95,7 @@ class RunConfigTest(unittest.TestCase):
         self.assertTrue(values["enable_cameras"])
 
     def test_selected_model_composes_with_every_ffw_sg2_scene(self):
-        config_path = Path(__file__).resolve().parents[1] / "configs" / "run.yaml"
-        config = load_run_config(config_path)
+        config = ProfileStore().load(DEFAULT_PROFILE_ID)
 
         for scene_name in REGISTRY.scenes:
             with self.subTest(scene=scene_name):
@@ -109,9 +107,9 @@ class RunConfigTest(unittest.TestCase):
                 self.assertEqual(values["robot"], "ffw_sg2")
                 self.assertEqual(values["scene"], scene_name)
 
-    def test_default_run_documents_every_registered_selection(self):
-        config_path = Path(__file__).resolve().parents[1] / "configs" / "run.yaml"
-        documentation = config_path.read_text(encoding="utf-8")
+    def test_default_profile_documents_every_registered_selection(self):
+        profile_path = ProfileStore().get(DEFAULT_PROFILE_ID).path
+        documentation = profile_path.read_text(encoding="utf-8")
 
         for selection in (
             *REGISTRY.robots,
@@ -120,9 +118,9 @@ class RunConfigTest(unittest.TestCase):
             with self.subTest(selection=selection):
                 self.assertIn(selection, documentation)
 
-    def test_default_run_documents_every_supported_config_field(self):
-        config_path = Path(__file__).resolve().parents[1] / "configs" / "run.yaml"
-        documentation = config_path.read_text(encoding="utf-8")
+    def test_default_profile_documents_every_supported_config_field(self):
+        profile_path = ProfileStore().get(DEFAULT_PROFILE_ID).path
+        documentation = profile_path.read_text(encoding="utf-8")
         supported_fields = (
             "schema_version",
             "robot",
@@ -160,6 +158,11 @@ class RunConfigTest(unittest.TestCase):
         for field in supported_fields:
             with self.subTest(field=field):
                 self.assertIn(f"{field}:", documentation)
+
+    def test_legacy_run_yaml_is_not_a_second_default_source(self):
+        legacy_config = Path(__file__).resolve().parents[1] / "configs" / "run.yaml"
+
+        self.assertFalse(legacy_config.exists())
 
     def test_model_and_policy_cannot_be_selected_together(self):
         with self.assertRaisesRegex(AssertionError, "mutually exclusive"):

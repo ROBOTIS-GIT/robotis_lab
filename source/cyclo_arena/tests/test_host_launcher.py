@@ -26,24 +26,48 @@ from cyclo_arena import host_launcher
 from cyclo_arena.catalog import REGISTRY
 from cyclo_arena.core.manifest import ResolvedManifest
 from cyclo_arena.core.model_resolver import ResolvedModel
+from cyclo_arena.core.profile_store import DEFAULT_PROFILE_ID, ProfileStore
 
 
 class HostLauncherTest(unittest.TestCase):
     """Verify model startup and container launch ordering without Docker."""
 
     def setUp(self):
-        self.config_path = Path(__file__).resolve().parents[1] / "configs" / "run.yaml"
+        self.config_path = ProfileStore().get(DEFAULT_PROFILE_ID).path
         self.model = ResolvedModel(
             checkpoint=Path("/models/checkpoint").resolve(),
             adapter=REGISTRY.model_adapters["ffw_sg2_gr00t_n17"],
             model_type="Gr00tN1d7",
         )
 
+    @mock.patch.object(host_launcher, "_run")
+    def test_matching_server_image_revision_skips_build(self, run):
+        run.return_value = mock.Mock(
+            returncode=0,
+            stdout=f"{self.model.adapter.server_source_revision}\n",
+        )
+
+        rebuilt = host_launcher._ensure_server_image(self.model)
+
+        self.assertFalse(rebuilt)
+        run.assert_called_once_with(
+            [
+                "docker",
+                "image",
+                "inspect",
+                "--format",
+                '{{ index .Config.Labels "cyclo_arena.gr00t_revision" }}',
+                self.model.adapter.server_image,
+            ],
+            check=False,
+            capture_output=True,
+        )
+
     @mock.patch.object(host_launcher, "_launch_in_container", return_value=0)
     @mock.patch.object(host_launcher, "_ensure_model_server")
     @mock.patch.object(host_launcher, "_ensure_cyclo_container")
     @mock.patch.object(host_launcher.shutil, "which", return_value="/usr/bin/docker")
-    def test_default_run_starts_selected_model(
+    def test_no_arguments_start_the_default_profile_model(
         self,
         _which,
         ensure_container,
@@ -55,19 +79,102 @@ class HostLauncherTest(unittest.TestCase):
             return_value=self.model,
         ) as resolve_model:
             ensure_model.return_value = 61234
-            result = host_launcher.main(["--config", str(self.config_path)])
+            result = host_launcher.main([])
 
         self.assertEqual(result, 0)
         resolve_model.assert_called_once()
         ensure_container.assert_called_once_with("cyclo_lab")
-        ensure_model.assert_called_once_with("cyclo_lab", self.model)
+        ensure_model.assert_called_once_with(
+            "cyclo_lab",
+            self.model,
+            rebuild_image=False,
+        )
         launch.assert_called_once()
         container_name, manifest, forwarded_args = launch.call_args.args
         self.assertEqual(container_name, "cyclo_lab")
         self.assertIsInstance(manifest, ResolvedManifest)
+        self.assertEqual(manifest.profile, DEFAULT_PROFILE_ID)
         self.assertEqual(manifest.run_values["remote_port"], 61234)
         self.assertEqual(manifest.model.adapter, "ffw_sg2_gr00t_n17")
         self.assertEqual(forwarded_args, [])
+
+    @mock.patch.object(host_launcher, "_launch_in_container", return_value=0)
+    @mock.patch.object(host_launcher, "_ensure_model_server")
+    @mock.patch.object(host_launcher, "_ensure_cyclo_container")
+    @mock.patch.object(host_launcher.shutil, "which", return_value="/usr/bin/docker")
+    def test_prepare_rebuild_flag_is_forwarded_to_the_model_server(
+        self,
+        _which,
+        ensure_container,
+        ensure_model,
+        launch,
+    ):
+        with mock.patch(
+            "cyclo_arena.core.config.RunConfig.resolve_model",
+            return_value=self.model,
+        ):
+            ensure_model.return_value = 61234
+            result = host_launcher.main([
+                "--prepare-only",
+                "--rebuild-server-image",
+            ])
+
+        self.assertEqual(result, 0)
+        ensure_container.assert_called_once_with("cyclo_lab")
+        ensure_model.assert_called_once_with(
+            "cyclo_lab",
+            self.model,
+            rebuild_image=True,
+        )
+        launch.assert_not_called()
+
+    @mock.patch.object(host_launcher, "_ping_server", return_value=True)
+    @mock.patch.object(host_launcher, "_create_server_container")
+    @mock.patch.object(host_launcher, "_available_port", return_value=61234)
+    @mock.patch.object(host_launcher, "_container_status", return_value="running")
+    @mock.patch.object(host_launcher, "_stop_inactive_model_servers")
+    @mock.patch.object(host_launcher, "_server_container_name", return_value="cyclo-gr00t-test")
+    @mock.patch.object(host_launcher, "_ensure_server_image", return_value=True)
+    @mock.patch.object(host_launcher, "_run")
+    def test_rebuilt_image_recreates_the_server_container(
+        self,
+        run,
+        ensure_image,
+        _server_name,
+        _stop_inactive,
+        _container_status,
+        _available_port,
+        create_server,
+        _ping_server,
+    ):
+        port = host_launcher._ensure_model_server(
+            "cyclo_lab",
+            self.model,
+            rebuild_image=True,
+        )
+
+        self.assertEqual(port, 61234)
+        ensure_image.assert_called_once_with(self.model, force_rebuild=True)
+        run.assert_called_once_with([
+            "docker",
+            "rm",
+            "--force",
+            "cyclo-gr00t-test",
+        ])
+        create_server.assert_called_once_with(
+            self.model,
+            "cyclo-gr00t-test",
+            61234,
+        )
+
+    def test_start_groot_shell_delegates_to_the_host_launcher(self):
+        script_path = host_launcher.REPOSITORY_ROOT / "docker" / "container.sh"
+        script = script_path.read_text(encoding="utf-8")
+
+        self.assertIn("local -a launcher_args=(--prepare-only)", script)
+        self.assertIn("launcher_args+=(--rebuild-server-image)", script)
+        self.assertIn("python3 -m cyclo_arena.host_launcher", script)
+        self.assertNotIn("build_groot_image()", script)
 
     @mock.patch.object(host_launcher, "_launch_in_container", return_value=0)
     @mock.patch.object(host_launcher, "_ensure_model_server")
@@ -93,6 +200,7 @@ class HostLauncherTest(unittest.TestCase):
         container_name, manifest, forwarded_args = launch.call_args.args
         self.assertEqual(container_name, "cyclo_lab")
         self.assertIsInstance(manifest, ResolvedManifest)
+        self.assertIsNone(manifest.profile)
         self.assertIsNone(manifest.run_values["remote_port"])
         self.assertEqual(forwarded_args, ["--dry-run"])
 

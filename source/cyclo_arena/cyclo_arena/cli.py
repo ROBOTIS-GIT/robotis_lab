@@ -32,6 +32,7 @@ from cyclo_arena.core.manifest import ResolvedManifest
 from cyclo_arena.core.model_resolver import discover_models, model_search_root
 from cyclo_arena.core.profile_store import DEFAULT_PROFILE_ID, ProfileStore
 from cyclo_arena.core.robot_pose import list_robot_poses
+from cyclo_arena.core.server_state import load_server_port
 from cyclo_arena.core.workflows import WORKFLOWS, WorkflowKind, WorkflowSpec
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
@@ -109,7 +110,7 @@ def _add_run_parser(subparsers, command: str) -> None:
     parser.add_argument(
         "--config",
         type=Path,
-        help="Legacy Cyclo Arena YAML run configuration.",
+        help="Custom Cyclo Arena YAML run configuration.",
     )
     parser.add_argument(
         "--manifest",
@@ -285,7 +286,7 @@ def _resolve_manifest_source(
     model_adapter_override: str | None = None,
     use_default_profile: bool = True,
 ) -> ResolvedManifest | None:
-    """Resolve exactly one profile, legacy config, or process-boundary manifest."""
+    """Resolve exactly one profile, custom config, or process-boundary manifest."""
     selected_sources = sum(value is not None for value in (profile_id, config_path, manifest_path))
     assert selected_sources <= 1, "Select only one profile, --config, or --manifest"
     if manifest_path is not None:
@@ -389,6 +390,9 @@ def _resolve_run_args(args: argparse.Namespace) -> argparse.Namespace:
     elif args.num_episodes is not None:
         values["num_steps"] = None
 
+    if manifest is not None and manifest.model is not None and values.get("remote_port") is None and not args.dry_run:
+        values["remote_port"] = load_server_port(manifest.model.to_resolved_model(REGISTRY))
+
     defaults = {
         "robot": None,
         "scene": None,
@@ -419,7 +423,7 @@ def _resolve_run_args(args: argparse.Namespace) -> argparse.Namespace:
         dry_run=args.dry_run,
     )
     if resolved.robot is None or resolved.scene is None:
-        raise ValueError("Select robot and scene in --config or with --robot and --scene")
+        raise ValueError("Select robot and scene in a profile, --config, or with --robot and --scene")
     return resolved
 
 

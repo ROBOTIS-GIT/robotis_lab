@@ -82,25 +82,31 @@ cyclo-arena doctor --strict
 
 See [Arena integration](docs/arena_integration.md) for the compatibility contract and FFW-SG2 roadmap.
 
-Select the robot, scene, checkpoint, and initial pose in
-`source/cyclo_arena/configs/run.yaml`, prepare GR00T on the host, and run inside Cyclo Lab:
+Run the default FFW-SG2 + GR00T inference workflow directly from the host:
 
 ```bash
-./scripts/arena/run.sh --list-robots
-./scripts/arena/run.sh --list-scenes
-./scripts/arena/run.sh --list-models
-./scripts/arena/run.sh list profiles
-./scripts/arena/run.sh list workflows
-./docker/container.sh start-groot
-./docker/container.sh enter
 ./scripts/arena/run.sh
 ```
 
-Reusable scenarios can be launched without knowing a config path:
+That one command starts Cyclo Lab, prepares the selected GR00T server, and launches Isaac Sim. The
+default named profile is `ffw_sg2_gr00t`. Normal experiment setup requires editing only these two
+YAML locations:
+
+- `source/cyclo_arena/configs/profiles/ffw_sg2_gr00t.yaml` — robot, scene, checkpoint,
+  language instruction, and runtime
+- `source/cyclo_arena/configs/robots/ffw_sg2/poses/showroom.yaml` — the selected robot's
+  training-time joint pose
+
+Named-profile and inspection commands also run from the host:
 
 ```bash
-./scripts/arena/run.sh infer ffw_sg2_showroom_gr00t
-./scripts/arena/run.sh plan ffw_sg2_showroom_gr00t
+./scripts/arena/run.sh infer ffw_sg2_gr00t
+./scripts/arena/run.sh plan ffw_sg2_gr00t
+./scripts/arena/run.sh list robots
+./scripts/arena/run.sh list scenes
+./scripts/arena/run.sh list models
+./scripts/arena/run.sh list profiles
+./scripts/arena/run.sh list workflows
 ```
 
 The host resolves the selected profile/config and checkpoint metadata once, then sends an immutable
@@ -110,13 +116,16 @@ one execution contract.
 The launcher composes one generic Arena environment from the selected components; scene-specific
 environment aliases and model-specific Python catalog entries are not required.
 Store Cyclo Arena checkpoints under `docker/workspace/model`; the container exposes the same
-workspace at `/workspace/model`. `start-groot` validates N1.7 checkpoint metadata,
-builds the pinned model server, and prepares it before the container-side simulation
-connects to it.
+workspace at `/workspace/model`. The launcher validates N1.7 checkpoint metadata and prepares the
+pinned model server before simulation connects to it. Advanced users can prewarm or rebuild that
+server with `./docker/container.sh start-groot` or `./docker/container.sh start-groot --rebuild`,
+and can launch an external configuration with
+`./scripts/arena/run.sh --config /path/to/experiment.yaml`.
 
-Use `cyclo-arena list workflows` to see the upstream policy evaluation, batch evaluation,
-teleoperation, demonstration, remote-server, RL-training, and test entry points. Passthrough
-commands preserve Arena's native arguments, for example `cyclo-arena policy --help`.
+Use `./scripts/arena/run.sh list workflows` to see the upstream policy evaluation, batch
+evaluation, teleoperation, demonstration, remote-server, RL-training, and test entry points.
+Passthrough commands preserve Arena's native arguments, for example `cyclo-arena policy --help`
+inside the container.
 
 Initialize the official Arena compatibility gitlink and its matching Isaac Lab dependency without
 recursing into Arena's own development submodules:

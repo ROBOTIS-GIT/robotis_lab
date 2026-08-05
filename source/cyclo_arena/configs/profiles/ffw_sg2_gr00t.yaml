@@ -1,0 +1,159 @@
+# Copyright 2026 ROBOTIS CO., LTD.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# Author: Seongwoo Kim
+
+# Default FFW-SG2 + GR00T inference profile.
+#
+# Run it from the Cyclo Lab host checkout with one command:
+#
+#   ./scripts/arena/run.sh
+#
+# Edit this file to select the scene, checkpoint, language instruction, and
+# runtime. Robot joint values live separately in:
+#
+#   source/cyclo_arena/configs/robots/ffw_sg2/poses/<initial_pose>.yaml
+#
+# Every supported run-config field is documented below. Commented fields are
+# optional; deleting an optional field restores its registry/model default.
+
+schema_version: 1
+
+# Robot
+# -----
+# Registered now:
+#   ffw_sg2 - ROBOTIS FFW-SG2 dual-arm mobile manipulator.
+robot:
+  name: ffw_sg2
+
+  # Selects configs/robots/ffw_sg2/poses/showroom.yaml. Available pose IDs:
+  # showroom, cartoning, recycling. Keep the selected pose consistent with
+  # the initial joint state used to train the checkpoint.
+  initial_pose: showroom
+
+  # Optional action-space override. Normally omit this so checkpoint metadata
+  # selects the compatible embodiment automatically. Available for FFW-SG2:
+  #   ffw_sg2_abs_joint_pos         - 19 joint-position actions
+  #   ffw_sg2_mobile_abs_joint_pos  - 19 joints plus [vx, vy, wz]
+  # embodiment: ffw_sg2_mobile_abs_joint_pos
+
+  # Optional joint overrides applied after initial_pose.
+  # head_position is [head_joint1, head_joint2] in radians.
+  # lift_position is in meters; the FFW-SG2 range is [-0.5, 0.0].
+  # head_position: [0.5, 0.0]
+  # lift_position: -0.2
+
+# Scene
+# -----
+# All 12 scenes currently registered in Cyclo Arena are launchable here.
+# Only robotis_showroom_training is in-distribution for the default
+# showroom_groot checkpoint. The other 11 scenes are useful robustness demos,
+# but they are out-of-distribution (OOD), so successful behavior is not assured.
+#
+# In-distribution for showroom_groot:
+#   robotis_showroom_training    - ROBOTIS showroom layout used for FFW-SG2 training.
+#
+# Launchable, out-of-distribution for showroom_groot:
+#   galileo                      - Galileo locomotion-manipulation warehouse.
+#   robotis_showroom             - Cyclo Lab's local ROBOTIS showroom.
+#   simple_warehouse             - Isaac Sim simple multi-shelf warehouse.
+#   kitchen                      - Arena kitchen.
+#   kitchen_with_open_drawer     - Arena kitchen with an open drawer.
+#   lightwheel_robocasa_kitchen  - Lightwheel RoboCasa kitchen.
+#   packing_table                - Arena packing-table workstation.
+#   table                        - Isaac Sim Seattle Lab table.
+#   office_table_background      - Arena office table.
+#   maple_table_robolab          - Arena Robolab maple table.
+#   table_oak_robolab            - Arena Robolab oak table.
+scene:
+  name: robotis_showroom_training
+
+  # Optional FFW-SG2 base-pose overrides. When omitted, the selected scene's
+  # registered placement is used. Position is [x, y, z] in meters; yaw is a
+  # rotation around +Z in radians (-1.5708 is -90 degrees).
+  # robot_position_xyz: [-1.316, 1.681, 0.0]
+  # robot_yaw: 3.141592653589793
+
+  # Optional constructor arguments for lightwheel_robocasa_kitchen only.
+  # Remove the comment markers and choose the desired layout/style IDs after
+  # setting scene.name to lightwheel_robocasa_kitchen.
+  # options:
+  #   kitchen_layout: 1
+  #   kitchen_style: 1
+
+# GR00T model
+# -----------
+# Checkpoints are stored on the host under docker/workspace/model and mounted
+# in Docker at /workspace/model. CYCLO_ARENA_MODEL_ROOT makes this path portable.
+# Change only the directory name when selecting another compatible checkpoint;
+# no Python catalog registration is required.
+model:
+  checkpoint: ${CYCLO_ARENA_MODEL_ROOT}/showroom_groot
+
+  # auto reads config.json and processor_config.json, selects the compatible
+  # FFW-SG2 adapter/action space, and validates the checkpoint schema.
+  # Explicit debugging choices: ffw_sg2_gr00t_n17,
+  # ffw_sg2_gr00t_n17_showroom.
+  adapter: auto
+
+# Language instruction / task
+# ---------------------------
+# scene_only currently supplies no success predicate or benchmark metric.
+# description is still sent to GR00T as the language instruction. The default
+# below is the exact label used to train Dongkkka/showroom_groot.
+task:
+  name: scene_only
+  description: Cyclo-Real-Showroom-FFW-SG2-v0
+
+# Runtime
+# -------
+runtime:
+  # Stop after this many policy/environment steps.
+  num_steps: 10000
+
+  # Alternative stopping rule. num_steps and num_episodes are mutually
+  # exclusive, so comment out num_steps before enabling this field.
+  # num_episodes: 10
+
+  # Remote GR00T inference normally uses one environment.
+  num_envs: 1
+
+  # Optional Isaac Lab simulation device and deterministic seed.
+  # device: cuda:0
+  # seed: 42
+
+  # true enables camera observations required by the default vision policy.
+  enable_cameras: true
+
+  # false opens the Isaac Sim window; true runs without a visible window.
+  # Camera observations still render offscreen when both values are true.
+  headless: false
+
+# Direct-policy mode (optional)
+# -----------------------------
+# model and policy are mutually exclusive. To run without a checkpoint managed
+# by Cyclo Arena, remove/comment the model block and enable this complete policy
+# block. zero_action is useful for scene smoke tests; remote settings apply to
+# policies served by an already running endpoint.
+# policy:
+#   type: zero_action
+#   remote_host: 127.0.0.1
+#   remote_port: 5555
+#   remote_timeout_ms: 120000
+
+# One-off overrides can be supplied without editing this profile, for example:
+#
+#   ./scripts/arena/run.sh --scene kitchen --num-steps 100 --headless
+#   ./scripts/arena/run.sh --robot-position-xyz 0 0 0 --robot-yaw -1.5708
+#   ./scripts/arena/run.sh --head-position 0.5 0 --lift-position -0.2

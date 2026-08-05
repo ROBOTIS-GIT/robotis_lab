@@ -20,8 +20,6 @@ tabs 4 2>/dev/null || true
 # get source directory
 export CYCLOLAB_PATH="$( cd "$( dirname "${BASH_SOURCE[0]}" )/.." &> /dev/null && pwd )"
 export DOCKER_DIR="${CYCLOLAB_PATH}/docker"
-GROOT_REPOSITORY_URL="https://github.com/NVIDIA/Isaac-GR00T.git"
-CYCLO_ARENA_RUN_CONFIG="${CYCLOLAB_PATH}/source/cyclo_arena/configs/run.yaml"
 
 #==
 # Helper functions
@@ -37,9 +35,10 @@ print_help() {
     echo -e "commands:"
     echo -e "  build                Build the docker image for Cyclo Lab"
     echo -e "  start                Start the docker container"
-    echo -e "  start-groot          Auto-select, build, and start the run.yaml GR00T runtime"
+    echo -e "  start-groot          Prebuild and start the default-profile GR00T runtime"
     echo -e "                       Supports N1.7 checkpoint metadata"
     echo -e "                       Add --rebuild to rebuild the selected version"
+    echo -e "                       Normal ./scripts/arena/run.sh runs this automatically"
     echo -e "  recreate             Recreate the container from the current image"
     echo -e "  enter                Enter the running docker container"
     echo -e "  stop                 Stop the docker container"
@@ -66,109 +65,11 @@ prepare_workspace() {
     mkdir -p "${DOCKER_DIR}/workspace/model"
 }
 
-# Print the image and pinned source revision selected by run.yaml.
-resolve_groot_runtime() {
-    CYCLO_ARENA_MODEL_ROOT="${DOCKER_DIR}/workspace/model" \
-    PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONPATH="${CYCLOLAB_PATH}/source/cyclo_arena${PYTHONPATH:+:${PYTHONPATH}}" \
-        python3 -m cyclo_arena.host_launcher \
-        --config "${CYCLO_ARENA_RUN_CONFIG}" \
-        --print-server-runtime
-}
-
-# Build one isolated GR00T version without changing the checked-out submodules.
-build_groot_image() {
-    local image="$1"
-    local source_revision="$2"
-    local force_rebuild="${3:-false}"
-    local build_root
-    local source_checkout
-    local build_context
-    local dockerfile
-    local build_status
-    local -a build_command
-
-    if [ "${force_rebuild}" != "true" ] && docker image inspect "${image}" &> /dev/null; then
-        echo "[INFO] GR00T image already exists: ${image}"
-        return 0
-    fi
-
-    build_root="$(mktemp -d /tmp/cyclo-groot-build.XXXXXX)"
-    source_checkout="${build_root}/source"
-    git init --quiet "${source_checkout}"
-    git -C "${source_checkout}" remote add origin "${GROOT_REPOSITORY_URL}"
-    echo "[INFO] Fetching Isaac-GR00T revision: ${source_revision}"
-    git -C "${source_checkout}" fetch --quiet --depth 1 origin "${source_revision}"
-    # The Docker build needs source code only. Avoid downloading large Git LFS
-    # media assets while checking out the pinned Isaac-GR00T revision.
-    GIT_LFS_SKIP_SMUDGE=1 \
-        git -C "${source_checkout}" checkout --quiet --detach FETCH_HEAD
-
-    if [ ! -f "${source_checkout}/docker/Dockerfile" ]; then
-        echo "[ERROR] Isaac-GR00T Dockerfile is unavailable at ${source_revision}" >&2
-        rm -rf "${build_root}"
-        exit 1
-    fi
-
-    if grep -q 'COPY src/gr00t' "${source_checkout}/docker/Dockerfile"; then
-        build_context="${build_root}/context"
-        dockerfile="${build_context}/Dockerfile"
-        mkdir -p "${build_context}/src/gr00t"
-        cp "${source_checkout}/docker/Dockerfile" "${dockerfile}"
-        tar \
-            --exclude='./.git' \
-            --exclude='./.venv' \
-            --exclude='*/__pycache__' \
-            --exclude='./logs' \
-            -C "${source_checkout}" -cf - . \
-            | tar -C "${build_context}/src/gr00t" -xf -
-    else
-        build_context="${source_checkout}"
-        dockerfile="${source_checkout}/docker/Dockerfile"
-    fi
-
-    echo "[INFO] Building isolated GR00T image: ${image}"
-    if docker buildx version &> /dev/null; then
-        build_command=(
-            docker buildx build
-            --load
-            --platform linux/amd64
-            --network host
-            --label "cyclo_arena.gr00t_revision=${source_revision}"
-            -f "${dockerfile}"
-            -t "${image}"
-            "${build_context}"
-        )
-    else
-        build_command=(
-            docker build
-            --platform linux/amd64
-            --network host
-            --label "cyclo_arena.gr00t_revision=${source_revision}"
-            -f "${dockerfile}"
-            -t "${image}"
-            "${build_context}"
-        )
-    fi
-    set +e
-    "${build_command[@]}"
-    build_status=$?
-    set -e
-    rm -rf "${build_root}"
-    if [ ${build_status} -ne 0 ]; then
-        echo "[ERROR] Failed to build GR00T image: ${image}" >&2
-        exit ${build_status}
-    fi
-}
-
-# Prepare the model server selected by source/cyclo_arena/configs/run.yaml.
+# Optionally prebuild and start the model server selected by the default profile.
 start_groot() {
-    local force_rebuild=false
-    local runtime_info
-    local groot_image
-    local groot_source_revision
+    local -a launcher_args=(--prepare-only)
     if [ "${1:-}" = "--rebuild" ]; then
-        force_rebuild=true
+        launcher_args+=(--rebuild-server-image)
     elif [ -n "${1:-}" ]; then
         echo "[ERROR] Unknown start-groot option: $1" >&2
         echo "[INFO] Supported option: --rebuild" >&2
@@ -176,29 +77,15 @@ start_groot() {
     fi
 
     prepare_workspace
-    runtime_info="$(resolve_groot_runtime)"
-    IFS=$'\t' read -r groot_image groot_source_revision <<< "${runtime_info}"
-    if [ -z "${groot_image}" ] || [ -z "${groot_source_revision}" ]; then
-        echo "[ERROR] Failed to resolve the GR00T runtime from run.yaml" >&2
-        exit 1
-    fi
-    echo "[INFO] Selected GR00T runtime: ${groot_image}"
-    build_groot_image \
-        "${groot_image}" \
-        "${groot_source_revision}" \
-        "${force_rebuild}"
-    start_container
-
-    echo "[INFO] Preparing the GR00T model selected in configs/run.yaml..."
+    echo "[INFO] Preparing the GR00T model selected by the default profile..."
     CYCLO_ARENA_MODEL_ROOT="${DOCKER_DIR}/workspace/model" \
     CYCLO_ARENA_SERVER_STATE="${DOCKER_DIR}/workspace/model/.cyclo_arena/server.json" \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONPATH="${CYCLOLAB_PATH}/source/cyclo_arena${PYTHONPATH:+:${PYTHONPATH}}" \
         python3 -m cyclo_arena.host_launcher \
-        --config "${CYCLO_ARENA_RUN_CONFIG}" \
-        --prepare-only
+        "${launcher_args[@]}"
 
-    echo "[INFO] GR00T is ready. Enter Cyclo Lab and run ./scripts/arena/run.sh"
+    echo "[INFO] GR00T is ready. Run ./scripts/arena/run.sh from the host."
 }
 
 # Configure X11 forwarding

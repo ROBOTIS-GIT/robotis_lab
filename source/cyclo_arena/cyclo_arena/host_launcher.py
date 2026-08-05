@@ -27,9 +27,10 @@ import shutil
 import socket
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
-from typing import Sequence
+from typing import Mapping, Sequence
 
 from cyclo_arena.catalog import REGISTRY
 from cyclo_arena.core.config import load_run_config
@@ -49,6 +50,7 @@ SERVER_CHECKPOINT_PATH = "/models/checkpoint"
 SERVER_CYCLO_ARENA_ROOT = "/opt/cyclo_arena"
 SERVER_ISAACLAB_ARENA_ROOT = "/opt/isaaclab_arena"
 SERVER_PROTOCOL_VERSION = "arena-remote-policy-v1"
+GROOT_REPOSITORY_URL = "https://github.com/NVIDIA/Isaac-GR00T.git"
 
 
 def _run(
@@ -56,12 +58,14 @@ def _run(
     *,
     check: bool = True,
     capture_output: bool = False,
+    env: Mapping[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Run one host command with consistent text output."""
     return subprocess.run(
         list(command),
         check=check,
         capture_output=capture_output,
+        env=dict(env) if env is not None else None,
         text=True,
     )
 
@@ -119,6 +123,91 @@ def _cyclo_arena_fingerprint() -> str:
         digest.update(source_path.relative_to(source_root).as_posix().encode())
         digest.update(source_path.read_bytes())
     return digest.hexdigest()
+
+
+def _ensure_server_image(model: ResolvedModel, *, force_rebuild: bool = False) -> bool:
+    """Build the checkpoint-selected GR00T image when it is unavailable or stale."""
+    adapter = model.adapter
+    revision = adapter.server_source_revision
+    assert revision, f"Model adapter {adapter.name!r} has no GR00T source revision"
+    image = _run(
+        [
+            "docker",
+            "image",
+            "inspect",
+            "--format",
+            '{{ index .Config.Labels "cyclo_arena.gr00t_revision" }}',
+            adapter.server_image,
+        ],
+        check=False,
+        capture_output=True,
+    )
+    if image.returncode == 0 and image.stdout.strip() == revision and not force_rebuild:
+        return False
+
+    if image.returncode == 0 and not force_rebuild:
+        print(f"[INFO] Rebuilding stale GR00T image: {adapter.server_image}", flush=True)
+    with tempfile.TemporaryDirectory(prefix="cyclo-groot-build-") as build_directory:
+        build_root = Path(build_directory)
+        source_checkout = build_root / "source"
+        _run(["git", "init", "--quiet", str(source_checkout)])
+        _run(["git", "-C", str(source_checkout), "remote", "add", "origin", GROOT_REPOSITORY_URL])
+        print(f"[INFO] Fetching Isaac-GR00T revision: {revision}", flush=True)
+        _run([
+            "git",
+            "-C",
+            str(source_checkout),
+            "fetch",
+            "--quiet",
+            "--depth",
+            "1",
+            "origin",
+            revision,
+        ])
+        checkout_environment = os.environ.copy()
+        checkout_environment["GIT_LFS_SKIP_SMUDGE"] = "1"
+        _run(
+            ["git", "-C", str(source_checkout), "checkout", "--quiet", "--detach", "FETCH_HEAD"],
+            env=checkout_environment,
+        )
+
+        source_dockerfile = source_checkout / "docker" / "Dockerfile"
+        assert source_dockerfile.is_file(), f"Isaac-GR00T Dockerfile is unavailable at {revision}"
+        if "COPY src/gr00t" in source_dockerfile.read_text(encoding="utf-8"):
+            build_context = build_root / "context"
+            build_context.mkdir()
+            dockerfile = build_context / "Dockerfile"
+            shutil.copy2(source_dockerfile, dockerfile)
+            shutil.copytree(
+                source_checkout,
+                build_context / "src" / "gr00t",
+                ignore=shutil.ignore_patterns(".git", ".venv", "__pycache__", "logs"),
+            )
+        else:
+            build_context = source_checkout
+            dockerfile = source_dockerfile
+
+        buildx = _run(["docker", "buildx", "version"], check=False, capture_output=True)
+        if buildx.returncode == 0:
+            command = ["docker", "buildx", "build", "--load"]
+        else:
+            command = ["docker", "build"]
+        command += [
+            "--platform",
+            "linux/amd64",
+            "--network",
+            "host",
+            "--label",
+            f"cyclo_arena.gr00t_revision={revision}",
+            "-f",
+            str(dockerfile),
+            "-t",
+            adapter.server_image,
+            str(build_context),
+        ]
+        print(f"[INFO] Building isolated GR00T image: {adapter.server_image}", flush=True)
+        _run(command)
+    return True
 
 
 def _ensure_cyclo_container(container_name: str) -> None:
@@ -184,16 +273,6 @@ def _create_server_container(
 ) -> None:
     """Create a GR00T server directly from a resolved checkpoint."""
     adapter = model.adapter
-    image = _run(
-        ["docker", "image", "inspect", adapter.server_image],
-        check=False,
-        capture_output=True,
-    )
-    assert image.returncode == 0, (
-        f"GR00T server image {adapter.server_image!r} is unavailable. Build the "
-        "checkpoint-selected GR00T runtime with "
-        "./docker/container.sh start-groot."
-    )
     server_program = (
         ".venv/bin/python",
         "-m",
@@ -298,11 +377,18 @@ def _ping_server(container_name: str, host: str, port: int) -> bool:
 def _ensure_model_server(
     cyclo_container: str,
     model: ResolvedModel,
+    *,
+    rebuild_image: bool = False,
 ) -> int:
     """Start a checkpoint-specific server and return its persistent port."""
+    image_rebuilt = _ensure_server_image(model, force_rebuild=rebuild_image)
     container_name = _server_container_name(model)
     _stop_inactive_model_servers(container_name)
     status = _container_status(container_name)
+    if image_rebuilt and status is not None:
+        print(f"[INFO] Recreating GR00T server for rebuilt image: {container_name}", flush=True)
+        _run(["docker", "rm", "--force", container_name])
+        status = None
     if status is not None:
         server_arena_revision = _container_label(container_name, "cyclo_arena.arena_revision")
         if server_arena_revision != _arena_revision():
@@ -415,11 +501,12 @@ def _launch_in_container(
 def main(argv: Sequence[str] | None = None) -> int:
     """Resolve a checkpoint, prepare its server, and launch Cyclo Arena."""
     parser = argparse.ArgumentParser()
-    source = parser.add_mutually_exclusive_group(required=True)
+    source = parser.add_mutually_exclusive_group()
     source.add_argument("--config", type=Path)
     source.add_argument("--profile", default=None)
     parser.add_argument("--prepare-only", action="store_true")
     parser.add_argument("--print-server-runtime", action="store_true")
+    parser.add_argument("--rebuild-server-image", action="store_true")
     parser.add_argument("forwarded_args", nargs=argparse.REMAINDER)
     args = parser.parse_args(argv)
     forwarded_args = list(args.forwarded_args)
@@ -432,23 +519,28 @@ def main(argv: Sequence[str] | None = None) -> int:
         manifest = ProfileStore().resolve(args.profile or DEFAULT_PROFILE_ID, REGISTRY)
     model = manifest.model.to_resolved_model(REGISTRY) if manifest.model is not None else None
     if args.print_server_runtime:
-        assert model is not None, "A GR00T model must be selected in run.yaml"
+        assert model is not None, "The selected profile or config must contain a GR00T model"
         print(f"{model.adapter.server_image}\t{model.adapter.server_source_revision}")
         return 0
 
+    assert not args.rebuild_server_image or model is not None, "A GR00T model is required to rebuild its image"
     assert shutil.which("docker"), "Docker CLI is required on the host"
     container_name = f"cyclo_lab{os.environ.get('DOCKER_NAME_SUFFIX', '')}"
     _ensure_cyclo_container(container_name)
     remote_port = None
     if model is not None and "--dry-run" not in forwarded_args:
-        remote_port = _ensure_model_server(container_name, model)
+        remote_port = _ensure_model_server(
+            container_name,
+            model,
+            rebuild_image=args.rebuild_server_image,
+        )
         write_server_state(
             model,
             remote_port,
             _server_container_name(model),
         )
     if args.prepare_only:
-        assert model is not None, "start-groot requires a model in run.yaml"
+        assert model is not None, "start-groot requires a model in the selected profile or config"
         assert remote_port is not None, "GR00T server was not started"
         print(
             f"[OK] GR00T server prepared at 127.0.0.1:{remote_port}",

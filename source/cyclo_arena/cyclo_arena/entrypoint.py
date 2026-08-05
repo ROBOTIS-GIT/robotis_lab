@@ -25,9 +25,8 @@ from pathlib import Path
 from typing import Sequence
 
 from cyclo_arena import cli, host_launcher
+from cyclo_arena.core.profile_store import DEFAULT_PROFILE_ID
 
-REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
-DEFAULT_CONFIG = REPOSITORY_ROOT / "source" / "cyclo_arena" / "configs" / "run.yaml"
 ISAAC_SIM_PYTHON = Path("/isaac-sim/python.sh")
 STATIC_COMMANDS = frozenset({"list", "show", "plan", "validate"})
 LEGACY_LIST_COMMANDS = {
@@ -41,7 +40,7 @@ LEGACY_LIST_COMMANDS = {
 USAGE = """Usage:
   ./scripts/arena/run.sh [inference overrides]
   ./scripts/arena/run.sh infer [profile] [overrides]
-  ./scripts/arena/run.sh --config <config.yaml> [overrides]
+  ./scripts/arena/run.sh --config /path/to/experiment.yaml [overrides]
   ./scripts/arena/run.sh list profiles|workflows|robots|scenes|models
   ./scripts/arena/run.sh show profile [profile]
   ./scripts/arena/run.sh plan [profile]
@@ -49,13 +48,13 @@ USAGE = """Usage:
 
 Examples:
   ./scripts/arena/run.sh
-  ./scripts/arena/run.sh infer ffw_sg2_showroom_gr00t
+  ./scripts/arena/run.sh infer ffw_sg2_gr00t
   ./scripts/arena/run.sh list profiles
   ./scripts/arena/run.sh --num-steps 10 --headless
   ./scripts/arena/run.sh --scene kitchen --dry-run
 
-The no-argument command still reads source/cyclo_arena/configs/run.yaml. Named
-profiles hide config paths and are available through `infer <profile>`.
+The no-argument command uses the default named profile. Profiles hide config
+paths and are available through `infer <profile>`.
 Models are stored under docker/workspace/model on the host and mounted at
 /workspace/model in the Cyclo Lab container.
 """
@@ -81,8 +80,8 @@ def parse_launch_request(argv: Sequence[str]) -> LaunchRequest:
     """Parse wrapper options while leaving inference overrides untouched."""
     arguments = list(argv)
     inside = False
-    source_kind = "config"
-    source = str(DEFAULT_CONFIG)
+    source_kind = "profile"
+    source = DEFAULT_PROFILE_ID
     source_explicit = False
     index = 0
     while index < len(arguments):

@@ -25,6 +25,7 @@ from unittest import mock
 from cyclo_arena.catalog import REGISTRY
 from cyclo_arena.core.config import RunConfig
 from cyclo_arena.core.manifest import ResolvedManifest
+from cyclo_arena.core.model_resolver import ResolvedModel
 from cyclo_arena.core.profile_store import (
     DEFAULT_PROFILE_ID,
     ProfileStore,
@@ -94,11 +95,32 @@ class ResolvedManifestTest(unittest.TestCase):
         self.assertEqual(restored.to_mapping(), manifest.to_mapping())
         self.assertEqual(restored.fingerprint, manifest.fingerprint)
 
+    def test_manifest_resolution_does_not_read_runtime_server_state(self):
+        config = RunConfig.from_mapping({
+            "robot": "ffw_sg2",
+            "scene": "robotis_showroom_training",
+            "model": {"checkpoint": "/models/showroom_groot", "adapter": "auto"},
+        })
+        model = ResolvedModel(
+            checkpoint=Path("/models/showroom_groot"),
+            adapter=REGISTRY.model_adapters["ffw_sg2_gr00t_n17_showroom"],
+            model_type="Gr00tN1d7",
+        )
+
+        with mock.patch.object(RunConfig, "resolve_model", return_value=model), mock.patch(
+            "cyclo_arena.core.server_state.load_server_port",
+        ) as load_server_port:
+            manifest = ResolvedManifest.from_run_config(config, REGISTRY)
+
+        load_server_port.assert_not_called()
+        self.assertIsNone(manifest.run_values["remote_port"])
+        self.assertEqual(manifest.model.adapter, "ffw_sg2_gr00t_n17_showroom")
+
 
 class ProfileStoreTest(unittest.TestCase):
     """Verify profiles resolve by stable names in source and configured layouts."""
 
-    def test_default_profile_captures_current_showroom_run(self):
+    def test_default_profile_captures_current_ffw_sg2_run(self):
         store = ProfileStore()
 
         self.assertIn(DEFAULT_PROFILE_ID, store.names())
@@ -142,7 +164,7 @@ class ProfileStoreTest(unittest.TestCase):
         with self.assertRaisesRegex(AssertionError, "Invalid profile ID"):
             store.load("../run")
         with self.assertRaisesRegex(AssertionError, "must not include a YAML extension"):
-            store.load("ffw_sg2_showroom_gr00t.yaml")
+            store.load("ffw_sg2_gr00t.yaml")
 
 
 if __name__ == "__main__":

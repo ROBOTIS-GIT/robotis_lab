@@ -40,9 +40,7 @@ def _checkpoint_key(checkpoint: Path) -> str:
     try:
         return checkpoint.resolve().relative_to(model_root).as_posix()
     except ValueError as exc:
-        raise AssertionError(
-            f"Checkpoint {checkpoint} is outside model root {model_root}"
-        ) from exc
+        raise AssertionError(f"Checkpoint {checkpoint} is outside model root {model_root}") from exc
 
 
 def write_server_state(
@@ -74,19 +72,19 @@ def load_server_port(model: ResolvedModel) -> int | None:
     if state_path is None:
         return None
     assert state_path.is_file(), (
-        "GR00T server is not prepared. Run ./docker/container.sh start-groot "
-        "on the host first."
+        "GR00T server is not prepared. Run ./scripts/arena/run.sh on the host, "
+        "or prewarm it with ./docker/container.sh start-groot."
     )
     values: Any = json.loads(state_path.read_text(encoding="utf-8"))
     assert isinstance(values, Mapping), f"Invalid GR00T server state: {state_path}"
     expected_checkpoint = _checkpoint_key(model.checkpoint)
     assert values.get("checkpoint") == expected_checkpoint, (
-        f"Prepared GR00T server uses {values.get('checkpoint')!r}, but run.yaml "
-        f"selects {expected_checkpoint!r}. Run ./docker/container.sh start-groot again."
+        f"Prepared GR00T server uses {values.get('checkpoint')!r}, but the selected profile or config "
+        f"uses {expected_checkpoint!r}. Run ./scripts/arena/run.sh on the host again."
     )
     assert values.get("adapter") == model.adapter.name, (
         f"Prepared GR00T adapter {values.get('adapter')!r} does not match "
-        f"{model.adapter.name!r}. Run ./docker/container.sh start-groot again."
+        f"{model.adapter.name!r}. Run ./scripts/arena/run.sh on the host again."
     )
     port = int(values["port"])
     assert 0 < port < 65536, f"Invalid GR00T server port in {state_path}: {port}"

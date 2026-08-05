@@ -28,7 +28,7 @@ from cyclo_arena.core.config import RunConfig, load_run_config
 from cyclo_arena.core.manifest import ResolvedManifest
 from cyclo_arena.core.registry import CycloArenaRegistry
 
-DEFAULT_PROFILE_ID = "ffw_sg2_showroom_gr00t"
+DEFAULT_PROFILE_ID = "ffw_sg2_gr00t"
 PROFILE_ROOT_ENVIRONMENT = "CYCLO_ARENA_PROFILE_ROOT"
 
 

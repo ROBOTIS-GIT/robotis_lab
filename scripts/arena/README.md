@@ -1,59 +1,51 @@
 # Cyclo Arena launcher
 
-Choose a robot, scene, downloaded checkpoint, and robot initial pose in
-`source/cyclo_arena/configs/run.yaml`:
+## Standard workflow
 
-```yaml
-robot:
-  name: ffw_sg2
-  initial_pose: showroom
-
-scene: robotis_showroom_training
-
-model:
-  checkpoint: ${CYCLO_ARENA_MODEL_ROOT}/showroom_groot
-  adapter: auto
-```
-
-Run the editable default configuration from the host:
+Run inference from the Cyclo Lab host checkout with one command:
 
 ```bash
 ./scripts/arena/run.sh
 ```
 
-The host launcher starts Cyclo Lab, prepares the selected GR00T server, and passes one resolved
-manifest into the simulator container. The configuration and checkpoint metadata are not resolved
-a second time inside Docker. The existing explicit preparation flow remains available:
+The no-argument command selects the `ffw_sg2_gr00t` profile. It starts the Cyclo Lab container,
+validates the checkpoint, builds or starts the matching GR00T server when necessary, and launches
+Isaac Sim. Entering the container or running `start-groot` first is not required.
+
+Normal setup is intentionally limited to two editable YAML locations:
+
+- `source/cyclo_arena/configs/profiles/ffw_sg2_gr00t.yaml` selects the robot, scene, checkpoint,
+  language instruction, and runtime options. It also lists every available scene and every supported
+  field.
+- `source/cyclo_arena/configs/robots/ffw_sg2/poses/showroom.yaml` defines the joint pose selected by
+  `robot.initial_pose: showroom`. Keep it aligned with the checkpoint's training-time initial state.
+
+The default checkpoint directory is `docker/workspace/model/showroom_groot` on the host. Docker
+mounts `docker/workspace/model` at `/workspace/model`; `${CYCLO_ARENA_MODEL_ROOT}` therefore keeps
+the profile portable between host and container. Selecting another compatible checkpoint only
+requires changing `model.checkpoint`. No Python catalog entry is needed.
+
+## Named profiles and overrides
+
+Profiles are selected by ID, without exposing their filesystem path:
 
 ```bash
-./docker/container.sh start-groot
-./docker/container.sh enter
-
-# Inside Cyclo Lab
-./scripts/arena/run.sh
+./scripts/arena/run.sh infer ffw_sg2_gr00t
+./scripts/arena/run.sh show profile ffw_sg2_gr00t
+./scripts/arena/run.sh plan ffw_sg2_gr00t
+./scripts/arena/run.sh validate ffw_sg2_gr00t
 ```
 
-The host model workspace is `docker/workspace/model`. Docker Compose mounts it at
-`/workspace/model` and sets `CYCLO_ARENA_MODEL_ROOT` automatically, so the same YAML path works in
-both environments. `start-groot` validates the checkpoint type, builds `cyclo-gr00t:n1.7`, starts
-the checkpoint server, and writes its endpoint below the shared model
-workspace. Use `start-groot --rebuild` to rebuild the selected version.
+`plan` prints the immutable `ResolvedManifest` passed across the host/container boundary.
+`validate` checks robot, scene, task, checkpoint, embodiment, and adapter compatibility without
+starting Isaac Sim. Command-line values can temporarily override profile values:
 
-The launcher reads the checkpoint metadata and verifies its observation/action schema. The prepared
-server endpoint is read from the shared model workspace before the selected scene starts.
-Downloading another compatible checkpoint only requires changing `model.checkpoint`, running
-`start-groot` again, and starting inference; no Python registration is needed.
+```bash
+./scripts/arena/run.sh --scene kitchen --num-steps 100 --headless
+./scripts/arena/run.sh --dry-run
+```
 
-N1.7 FFW-SG2 checkpoints use the same launcher. The adapter reads temporal observation
-offsets and the action horizon from the model. The simulator client, action handshake, remote
-transport, server loop, and chunk scheduler come directly from the checked-out Isaac Lab Arena
-submodule. A generic NVIDIA base checkpoint is not an FFW-SG2 checkpoint; its processor must
-contain a supported FFW-SG2 `new_embodiment` schema. The showroom variant uses head and both wrist
-cameras, 16 arm/gripper joints, and a three-axis mobile-base command. Metadata selects its 22D
-mobile embodiment automatically; existing joint-only checkpoints continue to use the 19D
-embodiment.
-
-Inspect valid and discovered selections without starting Isaac Sim:
+Inspect registered and discovered choices with:
 
 ```bash
 ./scripts/arena/run.sh list robots
@@ -65,29 +57,30 @@ Inspect valid and discovered selections without starting Isaac Sim:
 ./scripts/arena/run.sh --list-model-adapters
 ```
 
-`--list-models` scans `CYCLO_ARENA_MODEL_ROOT` and reports each
-checkpoint's compatible adapter. CLI values override runtime values without editing the config:
+## Advanced use
+
+The standard command prepares the model server automatically. To prewarm it without launching the
+simulator, or to force a rebuild, use:
 
 ```bash
-./scripts/arena/run.sh --num-steps 100 --headless
-./scripts/arena/run.sh --dry-run
+./docker/container.sh start-groot
+./docker/container.sh start-groot --rebuild
 ```
 
-Reusable scenarios live under `source/cyclo_arena/configs/profiles` and are selected by ID, so
-callers do not need to know a YAML path:
+An external run configuration remains supported for automation and one-off experiments:
 
 ```bash
-./scripts/arena/run.sh infer ffw_sg2_showroom_gr00t
-./scripts/arena/run.sh show profile ffw_sg2_showroom_gr00t
-./scripts/arena/run.sh plan ffw_sg2_showroom_gr00t
-./scripts/arena/run.sh validate ffw_sg2_showroom_gr00t
+./scripts/arena/run.sh --config /path/to/experiment.yaml
 ```
 
-`plan` prints the immutable `ResolvedManifest` used at the host/container boundary. `validate`
-checks robot/scene/task compatibility, checkpoint metadata, embodiment, and model adapter without
-launching Docker or Isaac Sim. `source/cyclo_arena/configs/run.yaml` remains the no-argument,
-heavily commented configuration for local experimentation.
+N1.7 FFW-SG2 checkpoints use the same launcher. The adapter reads temporal observation offsets and
+the action horizon from checkpoint metadata. The simulator client, action handshake, remote
+transport, server loop, and chunk scheduler come directly from the checked-out Isaac Lab Arena
+submodule. A generic NVIDIA base checkpoint is not automatically an FFW-SG2 checkpoint; its
+processor must contain a supported FFW-SG2 `new_embodiment` schema. The showroom variant uses head
+and both wrist cameras, 16 arm/gripper joints, and a three-axis mobile-base command. Metadata
+selects its 22D mobile embodiment automatically; joint-only checkpoints use the 19D embodiment.
 
 `run.sh` only establishes portable paths and enters the tested Python router. Robot, scene,
-model-adapter, policy, profile, manifest, and workflow logic belongs in
-`source/cyclo_arena`; checkpoint instances remain external files.
+model-adapter, policy, profile, manifest, and workflow logic belongs in `source/cyclo_arena`;
+checkpoint instances remain external files.

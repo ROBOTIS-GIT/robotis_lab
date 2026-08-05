@@ -297,11 +297,6 @@ class RunConfig:
             assert (
                 model_adapter.robot == self.robot.name
             ), f"Adapter {model_adapter.name!r} requires robot {model_adapter.robot!r}, not {self.robot.name!r}"
-        prepared_remote_port = None
-        if model is not None:
-            from cyclo_arena.core.server_state import load_server_port
-
-            prepared_remote_port = load_server_port(model)
         policy_name = model_adapter.policy if model_adapter is not None else self.policy.type
         assert policy_name in registry.policies, f"Unknown Cyclo Arena policy: {policy_name!r}"
         registry.compose(
@@ -339,7 +334,7 @@ class RunConfig:
             "policy_type": policy.runtime_target or policy.name,
             "task_description": self.task.description,
             "remote_host": "127.0.0.1" if model_adapter is not None else self.policy.remote_host,
-            "remote_port": self.policy.remote_port or prepared_remote_port,
+            "remote_port": self.policy.remote_port,
             "remote_timeout_ms": (
                 model_adapter.remote_timeout_ms if model_adapter is not None else self.policy.remote_timeout_ms
             ),

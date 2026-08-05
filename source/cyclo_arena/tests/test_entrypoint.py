@@ -26,23 +26,23 @@ from cyclo_arena import entrypoint
 class LaunchRequestTest(unittest.TestCase):
     """Verify friendly commands resolve to one unambiguous execution source."""
 
-    def test_no_arguments_preserve_the_editable_default_config(self):
+    def test_no_arguments_select_the_default_profile(self):
         request = entrypoint.parse_launch_request([])
 
-        self.assertEqual(request.source_kind, "config")
-        self.assertEqual(request.source, str(entrypoint.DEFAULT_CONFIG))
+        self.assertEqual(request.source_kind, "profile")
+        self.assertEqual(request.source, "ffw_sg2_gr00t")
         self.assertEqual(request.forwarded_args, ())
 
     def test_named_profile_hides_its_config_path(self):
         request = entrypoint.parse_launch_request([
             "infer",
-            "ffw_sg2_showroom_gr00t",
+            "ffw_sg2_gr00t",
             "--num-steps",
             "2",
         ])
 
         self.assertEqual(request.source_kind, "profile")
-        self.assertEqual(request.source, "ffw_sg2_showroom_gr00t")
+        self.assertEqual(request.source, "ffw_sg2_gr00t")
         self.assertEqual(request.forwarded_args, ("--num-steps", "2"))
 
     def test_legacy_catalog_flags_use_the_static_cli(self):
@@ -54,7 +54,7 @@ class LaunchRequestTest(unittest.TestCase):
         with self.assertRaisesRegex(AssertionError, "Select only one"):
             entrypoint.parse_launch_request([
                 "--config",
-                "run.yaml",
+                "custom.yaml",
                 "infer",
                 "profile",
             ])
@@ -74,6 +74,18 @@ class EntrypointTest(unittest.TestCase):
             "demo",
             "--",
             "--headless",
+        ])
+
+    @mock.patch.object(entrypoint, "ISAAC_SIM_PYTHON", Path("/definitely/missing/isaac-sim/python.sh"))
+    @mock.patch.object(entrypoint.host_launcher, "main", return_value=7)
+    def test_no_arguments_forward_the_default_profile_to_the_host(self, host_main):
+        result = entrypoint.main([])
+
+        self.assertEqual(result, 7)
+        host_main.assert_called_once_with([
+            "--profile",
+            "ffw_sg2_gr00t",
+            "--",
         ])
 
     @mock.patch.object(entrypoint.cli, "main", return_value=0)
