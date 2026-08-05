@@ -3,6 +3,10 @@
 #
 # Author: Seongwoo Kim
 
+# Keep Cyclo Lab resources isolated from other repositories whose Compose files
+# also live in a directory named "docker".
+name: cyclo_lab
+
 # Extension fields for reusable configurations
 x-default-cyclo-lab-volumes: &default-cyclo-lab-volumes
   # Isaac Sim cache volumes

@@ -65,6 +65,26 @@ prepare_workspace() {
     mkdir -p "${DOCKER_DIR}/workspace/model"
 }
 
+# Initialize the direct submodules required by the Docker build and runtime.
+initialize_submodules() {
+    echo "[INFO] Checking git submodules..."
+    cd "${CYCLOLAB_PATH}"
+    if [ ! -d ".git" ]; then
+        echo "[WARN] Not a git repository, skipping submodule initialization"
+        return 0
+    fi
+
+    if git submodule status | grep -q '^-'; then
+        echo "[INFO] Initializing git submodules..."
+        # Isaac Lab Arena's nested Isaac Lab checkout must not replace Cyclo
+        # Lab's pinned Isaac Lab runtime, so initialize direct dependencies only.
+        git submodule update --init
+        echo "[INFO] Git submodules initialized"
+    else
+        echo "[INFO] Git submodules already initialized"
+    fi
+}
+
 # Optionally prebuild and start the model server selected by the default profile.
 start_groot() {
     local -a launcher_args=(--prepare-only)
@@ -129,6 +149,7 @@ check_x11() {
 # Build docker image
 build_image() {
     echo "[INFO] Building Cyclo Lab docker image..."
+    initialize_submodules
     cd "${DOCKER_DIR}"
     docker compose build cyclo_lab
     echo "[INFO] Build complete!"
@@ -138,23 +159,7 @@ build_image() {
 start_container() {
     echo "[INFO] Starting Cyclo Lab docker container..."
     prepare_workspace
-
-    # Check and initialize git submodules
-    echo "[INFO] Checking git submodules..."
-    cd "${CYCLOLAB_PATH}"
-    if [ -d ".git" ]; then
-        if git submodule status | grep -q '^-'; then
-            echo "[INFO] Initializing git submodules..."
-            # Initialize direct dependencies only. Isaac Lab Arena's nested Isaac Lab checkout
-            # must not replace Cyclo Lab's pinned Isaac Lab 2.3 runtime.
-            git submodule update --init
-            echo "[INFO] Git submodules initialized"
-        else
-            echo "[INFO] Git submodules already initialized"
-        fi
-    else
-        echo "[WARN] Not a git repository, skipping submodule initialization"
-    fi
+    initialize_submodules
 
     cd "${DOCKER_DIR}"
 
@@ -234,7 +239,7 @@ clean_docker() {
     read -p "This will remove the container and image. Continue? (y/N) " -n 1 -r
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        docker compose down cyclo_lab
+        docker compose rm -sf cyclo_lab
         docker rmi robotis/cyclo-lab${DOCKER_NAME_SUFFIX}:latest || true
         echo "[INFO] Cleanup complete"
     else

@@ -6,9 +6,10 @@
 # Based on Isaac Lab Dockerfile structure
 
 # Base image from NVIDIA Isaac Sim
-ARG ISAACSIM_BASE_IMAGE_ARG
-ARG ISAACSIM_VERSION_ARG
+ARG ISAACSIM_BASE_IMAGE_ARG=nvcr.io/nvidia/isaac-sim
+ARG ISAACSIM_VERSION_ARG=5.1.0
 FROM ${ISAACSIM_BASE_IMAGE_ARG}:${ISAACSIM_VERSION_ARG} AS base
+ARG ISAACSIM_VERSION_ARG
 ENV ISAACSIM_VERSION=${ISAACSIM_VERSION_ARG}
 
 # Set default RUN shell to bash
@@ -57,7 +58,7 @@ RUN --mount=type=cache,target=/var/cache/apt \
 
 # Copy the Cyclo Lab directory including third_party submodules
 # (files to exclude are defined in .dockerignore)
-COPY ../ ${CYCLOLAB_PATH}
+COPY . ${CYCLOLAB_PATH}
 
 # Set up Isaac Lab path from third_party
 ENV ISAACLAB_PATH=${CYCLOLAB_PATH}/third_party/IsaacLab
@@ -102,8 +103,15 @@ RUN touch /bin/nvidia-smi && \
     touch /var/run/nvidia-persistenced/socket
 
 # Install Isaac Lab and all its dependencies
+# Keep the CUDA-enabled PyTorch versions bundled with Isaac Sim 5.1. Without
+# these constraints, pip may replace them with the latest CUDA toolchain while
+# resolving Isaac Lab's open-ended torch requirements.
 RUN --mount=type=cache,target=${DOCKER_USER_HOME}/.cache/pip \
-    ${ISAACLAB_PATH}/isaaclab.sh --install
+    ${ISAACLAB_PATH}/isaaclab.sh -p -m pip install \
+        --no-build-isolation 'flatdict==4.0.1' && \
+    PIP_CONSTRAINT=${CYCLOLAB_PATH}/docker/constraints.isaacsim.txt \
+    ${ISAACLAB_PATH}/isaaclab.sh --install && \
+    ${ISAACLAB_PATH}/isaaclab.sh -p -c "import isaaclab"
 
 # HACK: Remove install of quadprog dependency (from Isaac Lab)
 RUN ${ISAACLAB_PATH}/isaaclab.sh -p -m pip uninstall -y quadprog
