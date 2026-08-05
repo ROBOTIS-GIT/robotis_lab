@@ -1,86 +1,88 @@
 # Cyclo Arena launcher
 
-## Standard workflow
+Run Cyclo Arena inference from the **Cyclo Lab host checkout**.
 
-Run inference from the Cyclo Lab host checkout with one command:
+## Quick start
 
-```bash
+bash
+cd ~/cyclo_lab
 ./scripts/arena/run.sh
+
+
+
+The default command uses the `ffw_sg2_gr00t` profile and automatically prepares
+the Cyclo Lab container, matching GR00T server, and Isaac Sim. Do not enter the
+container or run `start-groot` first. The default opens the simulator window;
+add `--headless` to run without it.
+
+## Configuration
+
+For normal inference, edit only these two files:
+
+| Purpose | File |
+| --- | --- |
+| Robot, scene, model, instruction, and runtime | `source/cyclo_arena/configs/profiles/ffw_sg2_gr00t.yaml` |
+| FFW-SG2 initial joint pose | `source/cyclo_arena/configs/robots/ffw_sg2/poses/showroom.yaml` |
+
+Store checkpoints under `docker/workspace/model/<checkpoint-name>`. This directory
+is mounted at `/workspace/model` in Docker and its contents are ignored by Git.
+Reference a checkpoint portably in the profile:
+
+```yaml
+model:
+  checkpoint: ${CYCLO_ARENA_MODEL_ROOT}/showroom_groot
+  adapter: auto
 ```
 
-The no-argument command selects the `ffw_sg2_gr00t` profile. It starts the Cyclo Lab container,
-validates the checkpoint, builds or starts the matching GR00T server when necessary, and launches
-Isaac Sim. Entering the container or running `start-groot` first is not required.
+Adding a compatible checkpoint requires no Python catalog entry.
 
-Normal setup is intentionally limited to two editable YAML locations:
+## Common commands
 
-- `source/cyclo_arena/configs/profiles/ffw_sg2_gr00t.yaml` selects the robot, scene, checkpoint,
-  language instruction, and runtime options. It also lists every available scene and every supported
-  field.
-- `source/cyclo_arena/configs/robots/ffw_sg2/poses/showroom.yaml` defines the joint pose selected by
-  `robot.initial_pose: showroom`. Keep it aligned with the checkpoint's training-time initial state.
+| Command | Purpose |
+| --- | --- |
+| `./scripts/arena/run.sh` | Run the default profile |
+| `./scripts/arena/run.sh infer ffw_sg2_gr00t` | Run a named profile |
+| `./scripts/arena/run.sh --scene kitchen --headless` | Temporarily override profile values |
+| `./scripts/arena/run.sh --num-steps 100` | Limit the rollout length |
+| `./scripts/arena/run.sh --dry-run` | Preview the generated Arena command |
+| `./scripts/arena/run.sh show profile ffw_sg2_gr00t` | Print the profile and source path |
+| `./scripts/arena/run.sh validate ffw_sg2_gr00t` | Validate the profile and checkpoint |
+| `./scripts/arena/run.sh plan ffw_sg2_gr00t` | Print the resolved execution settings |
 
-The default checkpoint directory is `docker/workspace/model/showroom_groot` on the host. Docker
-mounts `docker/workspace/model` at `/workspace/model`; `${CYCLO_ARENA_MODEL_ROOT}` therefore keeps
-the profile portable between host and container. Selecting another compatible checkpoint only
-requires changing `model.checkpoint`. No Python catalog entry is needed.
-
-## Named profiles and overrides
-
-Profiles are selected by ID, without exposing their filesystem path:
+Robot-pose overrides follow the same pattern:
 
 ```bash
-./scripts/arena/run.sh infer ffw_sg2_gr00t
-./scripts/arena/run.sh show profile ffw_sg2_gr00t
-./scripts/arena/run.sh plan ffw_sg2_gr00t
-./scripts/arena/run.sh validate ffw_sg2_gr00t
+./scripts/arena/run.sh \
+  --robot-position-xyz 0 0 0 \
+  --robot-yaw -1.5708 \
+  --head-position 0.5 0 \
+  --lift-position -0.2
 ```
 
-`plan` prints the immutable `ResolvedManifest` passed across the host/container boundary.
-`validate` checks robot, scene, task, checkpoint, embodiment, and adapter compatibility without
-starting Isaac Sim. Command-line values can temporarily override profile values:
+CLI overrides affect only the current run. The default `showroom_groot` model was
+trained with `robotis_showroom_training`; behavior in other scenes is out of
+distribution and may not succeed.
+
+List available resources with `list`:
 
 ```bash
-./scripts/arena/run.sh --scene kitchen --num-steps 100 --headless
-./scripts/arena/run.sh --dry-run
-```
-
-Inspect registered and discovered choices with:
-
-```bash
-./scripts/arena/run.sh list robots
 ./scripts/arena/run.sh list scenes
-./scripts/arena/run.sh list models
-./scripts/arena/run.sh list profiles
-./scripts/arena/run.sh list workflows
-./scripts/arena/run.sh --list-poses
-./scripts/arena/run.sh --list-model-adapters
 ```
 
-## Advanced use
+Valid categories are `robots`, `scenes`, `models`, `poses`, `profiles`,
+`model-adapters`, and `workflows`.
 
-The standard command prepares the model server automatically. To prewarm it without launching the
-simulator, or to force a rebuild, use:
+## Advanced commands
 
 ```bash
+# Prepare the default GR00T server without launching Isaac Sim
 ./docker/container.sh start-groot
+
+# Force the pinned GR00T image to rebuild
 ./docker/container.sh start-groot --rebuild
-```
 
-An external run configuration remains supported for automation and one-off experiments:
-
-```bash
+# Run an external configuration
 ./scripts/arena/run.sh --config /path/to/experiment.yaml
-```
 
-N1.7 FFW-SG2 checkpoints use the same launcher. The adapter reads temporal observation offsets and
-the action horizon from checkpoint metadata. The simulator client, action handshake, remote
-transport, server loop, and chunk scheduler come directly from the checked-out Isaac Lab Arena
-submodule. A generic NVIDIA base checkpoint is not automatically an FFW-SG2 checkpoint; its
-processor must contain a supported FFW-SG2 `new_embodiment` schema. The showroom variant uses head
-and both wrist cameras, 16 arm/gripper joints, and a three-axis mobile-base command. Metadata
-selects its 22D mobile embodiment automatically; joint-only checkpoints use the 19D embodiment.
-
-`run.sh` only establishes portable paths and enters the tested Python router. Robot, scene,
-model-adapter, policy, profile, manifest, and workflow logic belongs in `source/cyclo_arena`;
-checkpoint instances remain external files.
+# Show all CLI options
+./scripts/arena/run.sh --help```
