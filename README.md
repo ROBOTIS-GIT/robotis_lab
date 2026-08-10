@@ -68,64 +68,11 @@ Docker installation provides a consistent environment with all dependencies pre-
 - Isaac Sim 5.1.0
 - Isaac Lab v2.3.2 (from third_party submodule)
 - Isaac Lab Arena v0.2 compatibility branch (from third_party submodule)
-- Cyclo Arena as a separate package at `source/cyclo_arena`
+- FFW-SG2 Galileo task composed from the IsaacLab-Arena submodule
 - zenoh_ros2_sdk (from third_party submodule)
 - eclipse-zenoh 1.6.x for ROS2-compatible Zenoh topics
 - LeRobot 0.3.3 (in separate virtual environment at `~/lerobot_env`)
 - All required dependencies and configurations
-
-Verify the Arena integration inside the Cyclo Lab container:
-
-```bash
-cyclo-arena doctor --strict
-```
-
-See [Arena integration](docs/arena_integration.md) for the compatibility contract and FFW-SG2 roadmap.
-
-Run the default FFW-SG2 + GR00T inference workflow directly from the host:
-
-```bash
-./scripts/arena/run.sh
-```
-
-That one command starts Cyclo Lab, prepares the selected GR00T server, and launches Isaac Sim. The
-default named profile is `ffw_sg2_gr00t`. Normal experiment setup requires editing only these two
-YAML locations:
-
-- `source/cyclo_arena/configs/profiles/ffw_sg2_gr00t.yaml` — robot, scene, checkpoint,
-  language instruction, and runtime
-- `source/cyclo_arena/configs/robots/ffw_sg2/poses/showroom.yaml` — the selected robot's
-  training-time joint pose
-
-Named-profile and inspection commands also run from the host:
-
-```bash
-./scripts/arena/run.sh infer ffw_sg2_gr00t
-./scripts/arena/run.sh plan ffw_sg2_gr00t
-./scripts/arena/run.sh list robots
-./scripts/arena/run.sh list scenes
-./scripts/arena/run.sh list models
-./scripts/arena/run.sh list profiles
-./scripts/arena/run.sh list workflows
-```
-
-The host resolves the selected profile/config and checkpoint metadata once, then sends an immutable
-manifest into Docker. This keeps host and container model paths, adapters, and runtime options in
-one execution contract.
-
-The launcher composes one generic Arena environment from the selected components; scene-specific
-environment aliases and model-specific Python catalog entries are not required.
-Store Cyclo Arena checkpoints under `docker/workspace/model`; the container exposes the same
-workspace at `/workspace/model`. The launcher validates N1.7 checkpoint metadata and prepares the
-pinned model server before simulation connects to it. Advanced users can prewarm or rebuild that
-server with `./docker/container.sh start-groot` or `./docker/container.sh start-groot --rebuild`,
-and can launch an external configuration with
-`./scripts/arena/run.sh --config /path/to/experiment.yaml`.
-
-Use `./scripts/arena/run.sh list workflows` to see the upstream policy evaluation, batch
-evaluation, teleoperation, demonstration, remote-server, RL-training, and test entry points.
-Passthrough commands preserve Arena's native arguments, for example `cyclo-arena policy --help`
-inside the container.
 
 Initialize the official Arena compatibility gitlink and its matching Isaac Lab dependency without
 recursing into Arena's own development submodules:
@@ -145,13 +92,9 @@ git add third_party/zenoh_ros2_sdk
 
 ./docker/container.sh build
 ./docker/container.sh recreate
-docker exec cyclo_lab bash -lc \
-  'cd /workspace/cyclo_lab && cyclo-arena doctor --strict'
 ```
 
-When changing the pinned release, update `EXPECTED_ZENOH_SDK_COMMIT` and
-`EXPECTED_ZENOH_SDK_VERSION` in `source/cyclo_arena/cyclo_arena/doctor.py` in the same commit. The
-current pin is Zenoh ROS2 SDK `v0.1.8`; `ai_sapiens` is not part of this integration.
+The current pin is Zenoh ROS2 SDK `v0.1.8`.
 
 ## Try examples
 
@@ -299,31 +242,49 @@ python scripts/imitation_learning/robomimic/play.py \
 
 https://github.com/user-attachments/assets/67267195-db02-4dd9-83cf-00830b4bc13f
 
-Launch the AI Worker SH5 runtime
+Launch AI Worker SH5
 
 ```bash
-# Uses ROS_DOMAIN_ID and Zenoh settings from the environment.
-python scripts/sim2real/runtime/sh5_runtime.py --enable_camera_views
+# NVIDIA Simple Warehouse with the SH5 Zenoh ROS2 bridge
+python scripts/sim2real/bringup.py \
+    --task Cyclo-Bringup-Simple-Warehouse-FFW-SH5-v0 \
+    --bridge ffw_sh5
 
-# NVIDIA Simple Warehouse environment
-python scripts/sim2real/runtime/sh5_runtime.py --enable_camera_views --enable_environment
+# Head and wrist camera operator view
+python scripts/sim2real/bringup.py \
+    --task Cyclo-Bringup-Simple-Warehouse-FFW-SH5-v0 \
+    --bridge ffw_sh5 \
+    --camera_view operator \
+    --headless
 ```
 
-Launch the FFW SG2 runtime
+Launch FFW SG2 in the Robotis showroom
 
 ```bash
-# Uses ROS_DOMAIN_ID and Zenoh settings from the environment.
-# Publishes the SG2 head and wrist observation camera topics.
-python scripts/sim2real/runtime/sg2_runtime.py --enable_camera
+# Publish robot state and camera topics without a local camera view
+python scripts/sim2real/bringup.py \
+    --task Cyclo-Real-Showroom-FFW-SG2-v0 \
+    --bridge ffw_sg2 \
+    --headless \
+    --enable_cameras
 
-# Robotis showroom environment: robotis_showroom_scene.usda composes robotis_showroom.usd and robotis_showroom_objects.usd.
-python scripts/sim2real/runtime/sg2_runtime.py --enable_camera --enable_environment
+# Six-camera operator view
+python scripts/sim2real/bringup.py \
+    --task Cyclo-Real-Showroom-FFW-SG2-v0 \
+    --bridge ffw_sg2 \
+    --headless \
+    --camera_view operator
+```
 
-# IsaacLab-Arena Galileo warehouse scene (streams the USD and its dependencies from NVIDIA on first launch)
-python scripts/sim2real/runtime/sg2_runtime.py \
-  --enable_camera \
-  --enable_environment \
-  --environment galileo_locomanip
+Launch FFW SG2 in the IsaacLab-Arena Galileo pick-and-place environment
+
+```bash
+# Galileo pick-and-place with the FFW-SG2 Zenoh ROS2 bridge
+python scripts/sim2real/bringup.py \
+    --task Cyclo-Arena-Galileo-Pick-Place-FFW-SG2-v0 \
+    --bridge ffw_sg2 \
+    --enable_cameras \
+    --headless
 ```
 
 </details>
@@ -447,33 +408,6 @@ lerobot-python scripts/sim2real/imitation_learning/data_converter/isaaclab2lerob
 ```bash
 python scripts/sim2real/imitation_learning/inference/inference_demos.py --task Cyclo-Real-Pick-Place-FFW-SG2-v0  --robot_type FFW_SG2 --enable_cameras
 
-```
-
-**FFW SG2 Showroom Task**
-
-* Teleop and record demos in Robotis showroom
-```bash
-python scripts/sim2real/imitation_learning/recorder/record_demos.py \
-    --task Cyclo-Real-Showroom-FFW-SG2-v0 \
-    --robot_type FFW_SG2 \
-    --dataset_file ./datasets/ffw_sg2_showroom_raw.hdf5 \
-    --num_demos 30 \
-    --headless \
-    --enable_cameras \
-    --camera_view operator
-```
-
-* Data convert Robotis showroom dataset to LeRobot
-```bash
-lerobot-python scripts/sim2real/imitation_learning/data_converter/isaaclab2lerobot.py \
-    --task Cyclo-Real-Showroom-FFW-SG2-v0 \
-    --robot_type FFW_SG2_SHOWROOM \
-    --dataset_file ./datasets/ffw_sg2_showroom_raw.hdf5 \
-    --frame_skip 0 \
-    --frame_stride 1 \
-    --resample_by_time \
-    --repo_id cyclo_lab/ffw_sg2_showroom \
-    --root ./datasets/lerobot/ffw_sg2_showroom
 ```
 
 ## License

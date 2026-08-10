@@ -41,10 +41,6 @@ x-default-cyclo-lab-volumes: &default-cyclo-lab-volumes
   - type: bind
     source: ../
     target: ${DOCKER_CYCLOLAB_PATH}
-  # Local checkpoints stay outside Git and use one stable container path.
-  - type: bind
-    source: ./workspace/model
-    target: ${DOCKER_CYCLO_ARENA_MODEL_PATH}
   # Isaac Lab volumes for artifacts (third_party/IsaacLab)
   - type: volume
     source: isaac-lab-docs
@@ -71,7 +67,6 @@ x-default-cyclo-lab-environment: &default-cyclo-lab-environment
   - ISAACSIM_PATH=${DOCKER_ISAACSIM_ROOT_PATH}
   - ISAACLAB_PATH=${DOCKER_ISAACLAB_PATH}
   - CYCLOLAB_PATH=${DOCKER_CYCLOLAB_PATH}
-  - CYCLO_ARENA_MODEL_ROOT=${DOCKER_CYCLO_ARENA_MODEL_PATH}
   - OMNI_KIT_ALLOW_ROOT=1
   - ACCEPT_EULA=${ACCEPT_EULA}
   - PRIVACY_CONSENT=Y

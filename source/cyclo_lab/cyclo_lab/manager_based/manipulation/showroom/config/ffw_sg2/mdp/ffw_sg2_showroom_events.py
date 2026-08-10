@@ -1,4 +1,4 @@
-"""Reset events for SG2 showroom recording tasks."""
+"""Reset events for the continuous SG2 showroom environment."""
 
 from __future__ import annotations
 
@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING
 
 import torch
 from isaaclab.assets import Articulation
-from isaaclab.envs.mdp.events import reset_scene_to_default
 from isaaclab.managers import SceneEntityCfg
 
 if TYPE_CHECKING:

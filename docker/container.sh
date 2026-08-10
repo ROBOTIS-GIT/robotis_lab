@@ -35,10 +35,6 @@ print_help() {
     echo -e "commands:"
     echo -e "  build                Build the docker image for Cyclo Lab"
     echo -e "  start                Start the docker container"
-    echo -e "  start-groot          Prebuild and start the default-profile GR00T runtime"
-    echo -e "                       Supports N1.7 checkpoint metadata"
-    echo -e "                       Add --rebuild to rebuild the selected version"
-    echo -e "                       Normal ./scripts/arena/run.sh runs this automatically"
     echo -e "  recreate             Recreate the container from the current image"
     echo -e "  enter                Enter the running docker container"
     echo -e "  stop                 Stop the docker container"
@@ -60,11 +56,6 @@ load_env() {
     fi
 }
 
-# Create host directories required by bind mounts.
-prepare_workspace() {
-    mkdir -p "${DOCKER_DIR}/workspace/model"
-}
-
 # Initialize the direct submodules required by the Docker build and runtime.
 initialize_submodules() {
     echo "[INFO] Checking git submodules..."
@@ -83,29 +74,6 @@ initialize_submodules() {
     else
         echo "[INFO] Git submodules already initialized"
     fi
-}
-
-# Optionally prebuild and start the model server selected by the default profile.
-start_groot() {
-    local -a launcher_args=(--prepare-only)
-    if [ "${1:-}" = "--rebuild" ]; then
-        launcher_args+=(--rebuild-server-image)
-    elif [ -n "${1:-}" ]; then
-        echo "[ERROR] Unknown start-groot option: $1" >&2
-        echo "[INFO] Supported option: --rebuild" >&2
-        exit 2
-    fi
-
-    prepare_workspace
-    echo "[INFO] Preparing the GR00T model selected by the default profile..."
-    CYCLO_ARENA_MODEL_ROOT="${DOCKER_DIR}/workspace/model" \
-    CYCLO_ARENA_SERVER_STATE="${DOCKER_DIR}/workspace/model/.cyclo_arena/server.json" \
-    PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONPATH="${CYCLOLAB_PATH}/source/cyclo_arena${PYTHONPATH:+:${PYTHONPATH}}" \
-        python3 -m cyclo_arena.host_launcher \
-        "${launcher_args[@]}"
-
-    echo "[INFO] GR00T is ready. Run ./scripts/arena/run.sh from the host."
 }
 
 # Configure X11 forwarding
@@ -158,7 +126,6 @@ build_image() {
 # Start docker container
 start_container() {
     echo "[INFO] Starting Cyclo Lab docker container..."
-    prepare_workspace
     initialize_submodules
 
     cd "${DOCKER_DIR}"
@@ -196,7 +163,6 @@ start_container() {
 # Recreate the container from the current image
 recreate_container() {
     echo "[INFO] Recreating Cyclo Lab docker container..."
-    prepare_workspace
     cd "${DOCKER_DIR}"
 
     X11_COMPOSE_FILE=""
@@ -275,9 +241,6 @@ case "$1" in
         ;;
     start)
         start_container
-        ;;
-    start-groot)
-        start_groot "${2:-}"
         ;;
     recreate)
         recreate_container

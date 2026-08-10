@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from collections import deque
 
-from .robotis_showroom import spawn_environment_with_friction
+from .physics import spawn_environment_with_friction
 
 
 SIMPLE_WAREHOUSE_ENVIRONMENT_USD_PATH = (

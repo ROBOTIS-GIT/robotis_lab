@@ -8,16 +8,21 @@ import threading
 import time
 
 import isaaclab.utils.math as math_utils
+import torch
 
+from cyclo_lab.assets.sensors.ffw_sh5_cameras import FFW_SH5_CAMERA_IMAGE_ROTATIONS
 from cyclo_lab.robot_specs.ffw.mobile_base.odometry import SwerveOdometry, yaw_to_quaternion
 from cyclo_lab.robot_specs.ffw.mobile_base.swerve_drive import SwerveDriveController, SwerveModule
 from cyclo_lab.robot_specs.ffw import sh5 as sh5_cfg
+from cyclo_lab.runtime.publishers.camera_publishers import CompressedCameraPublishers
 from cyclo_lab.runtime.transport.ros2_zenoh import (
+    EMPTY,
     JOINT_STATE,
     JOINT_TRAJECTORY,
     ODOMETRY,
     TF_MESSAGE,
     TWIST,
+    best_effort_qos,
     close_endpoints,
     create_publisher,
     create_subscriber,
@@ -25,35 +30,75 @@ from cyclo_lab.runtime.transport.ros2_zenoh import (
     make_odometry_kwargs,
     make_tf_message_kwargs,
     now_time_msg,
+    ros_domain_id,
     transform_stamped_msg,
 )
 
 
-def _now_stamp():
-    return now_time_msg()
+DEFAULT_CMD_VEL_TIMEOUT_SECONDS = 0.1
 
 
-class SH5ZenohRos2Bridge:
+def _swerve_modules() -> list[SwerveModule]:
+    return [
+        SwerveModule(
+            steering_joint=steering_joint,
+            wheel_joint=wheel_joint,
+            x_offset=sh5_cfg.SH5_SWERVE_MODULE_X_OFFSETS[index],
+            y_offset=sh5_cfg.SH5_SWERVE_MODULE_Y_OFFSETS[index],
+            angle_offset=sh5_cfg.SH5_SWERVE_MODULE_ANGLE_OFFSETS[index],
+            steering_limit_lower=sh5_cfg.FFW_SH5_SWERVE_STEERING_LIMIT_LOWER,
+            steering_limit_upper=sh5_cfg.FFW_SH5_SWERVE_STEERING_LIMIT_UPPER,
+            wheel_speed_limit_lower=sh5_cfg.FFW_SH5_SWERVE_WHEEL_SPEED_LIMIT_LOWER,
+            wheel_speed_limit_upper=sh5_cfg.FFW_SH5_SWERVE_WHEEL_SPEED_LIMIT_UPPER,
+        )
+        for index, (steering_joint, wheel_joint) in enumerate(
+            zip(sh5_cfg.SH5_SWERVE_STEERING_JOINTS, sh5_cfg.SH5_SWERVE_WHEEL_JOINTS)
+        )
+    ]
+
+
+class FFWSH5TopicBridge:
+    """Apply SH5 Zenoh ROS2 commands and publish simulated robot state."""
+
+    requires_activation = False
+
     def __init__(
         self,
-        robot,
-        topic_names: dict[str, str],
-        joint_states_topic: str,
-        odom_topic: str,
-        tf_topic: str,
-        base_frame: str,
-        odom_frame: str,
-        trajectory_qos,
-        cmd_vel_topic: str | None,
-        swerve_modules: list[SwerveModule],
-        wheel_radius: float,
-        cmd_vel_timeout: float,
-    ):
-        self.robot = robot
-        self.base_frame = base_frame
-        self.odom_frame = odom_frame
+        env,
+        *,
+        disable_head: bool = False,
+        disable_lift: bool = False,
+        disable_cmd_vel: bool = False,
+        subscribe_reset: bool = True,
+        camera_publish_hz: float | None = None,
+        cmd_vel_timeout: float = DEFAULT_CMD_VEL_TIMEOUT_SECONDS,
+    ) -> None:
+        self.env = env
+        self.robot = env.scene["robot"]
+        self.base_frame = sh5_cfg.BASE_FRAME
+        self.odom_frame = sh5_cfg.ODOM_FRAME
+        self._reset_requested = threading.Event()
+        self._closed = False
+        self._zero_action = torch.zeros(
+            (env.num_envs, env.action_manager.total_action_dim),
+            device=env.device,
+            dtype=torch.float32,
+        )
+
+        topic_names = {
+            label: sh5_cfg.FFW_SH5_ACTION_TOPICS[label]
+            for label in ("right_arm", "right_hand", "left_arm", "left_hand")
+        }
+        if not disable_head:
+            topic_names["head"] = sh5_cfg.FFW_SH5_ACTION_TOPICS["head"]
+        if not disable_lift:
+            topic_names["lift"] = sh5_cfg.FFW_SH5_ACTION_TOPICS["lift"]
+        trajectory_qos = best_effort_qos(10)
+        cmd_vel_topic = None if disable_cmd_vel else sh5_cfg.CMD_VEL_TOPIC
+        swerve_modules = [] if disable_cmd_vel else _swerve_modules()
+        wheel_radius = sh5_cfg.SH5_SWERVE_WHEEL_RADIUS
+
         self.swerve_modules = swerve_modules
-        self.wheel_radius = wheel_radius
         self.cmd_vel_timeout = cmd_vel_timeout
         self.swerve_controller = (
             SwerveDriveController(swerve_modules, wheel_radius) if swerve_modules else None
@@ -68,7 +113,6 @@ class SH5ZenohRos2Bridge:
             else None
         )
         self._last_swerve_update_time = time.monotonic()
-        self.running = True
         self.lock = threading.Lock()
         self.pending_positions: dict[str, float] = {}
         self.latest_cmd_vel = (0.0, 0.0, 0.0)
@@ -101,10 +145,17 @@ class SH5ZenohRos2Bridge:
         ]
         self.subscribers = []
         self.publishers = []
-        self.joint_state_writer = create_publisher(joint_states_topic, JOINT_STATE)
-        self.odom_writer = create_publisher(odom_topic, ODOMETRY)
-        self.tf_writer = create_publisher(tf_topic, TF_MESSAGE)
+        self.joint_state_writer = create_publisher(sh5_cfg.JOINT_STATES_TOPIC, JOINT_STATE)
+        self.odom_writer = create_publisher(sh5_cfg.ODOM_TOPIC, ODOMETRY)
+        self.tf_writer = create_publisher(sh5_cfg.TF_TOPIC, TF_MESSAGE)
         self.publishers.extend([self.joint_state_writer, self.odom_writer, self.tf_writer])
+        self.camera_publishers = CompressedCameraPublishers(
+            env.scene,
+            sh5_cfg.FFW_SH5_CAMERA_TOPICS,
+            camera_publish_hz,
+            image_rotations=FFW_SH5_CAMERA_IMAGE_ROTATIONS,
+        )
+        self.publishers.extend(self.camera_publishers.endpoints)
 
         for label, topic_name in topic_names.items():
             if not topic_name:
@@ -127,6 +178,37 @@ class SH5ZenohRos2Bridge:
             )
             self.subscribers.append(cmd_vel_subscriber)
             print(f"[Zenoh ROS2] Subscribing cmd_vel: {cmd_vel_topic}")
+
+        if subscribe_reset:
+            self.subscribers.append(
+                create_subscriber(
+                    topic=sh5_cfg.SIMULATION_RESET_TOPIC,
+                    msg_type=EMPTY,
+                    callback=self._on_reset,
+                )
+            )
+
+        print(f"[Zenoh ROS2] FFW-SH5 topic bridge ready. ROS_DOMAIN_ID={ros_domain_id()}")
+
+    def _on_reset(self, _msg) -> None:
+        self._reset_requested.set()
+
+    def consume_reset_request(self) -> bool:
+        if not self._reset_requested.is_set():
+            return False
+        self._reset_requested.clear()
+        return True
+
+    def get_action(self) -> torch.Tensor:
+        self.apply_latest_targets()
+        return self._zero_action
+
+    def publish_observations(self) -> None:
+        self.update_odometry(float(self.env.step_dt))
+        self.publish_joint_states()
+        self.publish_odometry()
+        self.publish_tf()
+        self.camera_publishers.publish()
 
     # Parse trajectory topics and match joints
     def _store_trajectory(self, label: str, msg):
@@ -279,7 +361,7 @@ class SH5ZenohRos2Bridge:
                     velocities=velocities,
                     efforts=efforts,
                     frame_id="base_link",
-                    stamp=_now_stamp(),
+                    stamp=now_time_msg(),
                 )
             )
         except Exception as exc:
@@ -305,7 +387,7 @@ class SH5ZenohRos2Bridge:
                     linear_xyz=(state.vx, state.vy, 0.0),
                     angular_xyz=(0.0, 0.0, state.wz),
                     covariance=covariance,
-                    stamp=_now_stamp(),
+                    stamp=now_time_msg(),
                 )
             )
         except Exception as exc:
@@ -321,7 +403,7 @@ class SH5ZenohRos2Bridge:
                 )
             return
 
-        stamp = _now_stamp()
+        stamp = now_time_msg()
         body_pose_w = self.robot.data.body_link_state_w[0, :, :7]
         base_pose_w = body_pose_w[self._base_id]
         base_pos_w = base_pose_w[:3].unsqueeze(0)
@@ -362,7 +444,25 @@ class SH5ZenohRos2Bridge:
         except Exception as exc:
             print(f"[Zenoh ROS2] tf publish error: {exc}")
 
-    def shutdown(self):
-        self.running = False
+    def clear_command_cache(self):
+        """Discard received targets and reset base controller state."""
+        with self.lock:
+            self.pending_positions.clear()
+            self.latest_cmd_vel = (0.0, 0.0, 0.0)
+            self.last_cmd_vel_time = 0.0
+        self._last_swerve_update_time = time.monotonic()
+        if self.swerve_controller is not None:
+            self.swerve_controller.reset()
+        if self.odometry is not None:
+            self.odometry.reset()
+
+    def reset(self) -> None:
+        self._reset_requested.clear()
+        self.clear_command_cache()
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
         close_endpoints(self.subscribers)
         close_endpoints(self.publishers)

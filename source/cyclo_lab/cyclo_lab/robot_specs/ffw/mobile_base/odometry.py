@@ -21,8 +21,8 @@ from collections import deque
 from dataclasses import dataclass
 from typing import Sequence
 
+from .swerve_drive import normalize_angle
 
-_TWO_PI = 2.0 * math.pi
 
 
 @dataclass(frozen=True)
@@ -179,13 +179,6 @@ class SwerveOdometry:
         if solution is None:
             return 0.0, 0.0, 0.0
         return solution
-
-
-def normalize_angle(angle_rad: float) -> float:
-    remainder = math.fmod(angle_rad + math.pi, _TWO_PI)
-    if remainder < 0.0:
-        remainder += _TWO_PI
-    return remainder - math.pi
 
 
 def yaw_to_quaternion(yaw: float) -> tuple[float, float, float, float]:

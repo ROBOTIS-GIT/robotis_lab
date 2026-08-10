@@ -48,20 +48,6 @@ parser.add_argument("--dataset_file", type=str, default="./datasets/dataset.hdf5
 parser.add_argument("--num_demos", type=int, default=0, help="Number of demonstrations to record. Set to 0 for infinite.")
 parser.add_argument("--flush_steps", type=int, default=30, help="Streaming HDF5 flush interval in environment steps.")
 parser.add_argument(
-    "--camera_set",
-    type=str,
-    default="all",
-    choices=("all", "head", "none"),
-    help="Camera sensors to record when the task supports camera subsets.",
-)
-parser.add_argument(
-    "--camera_view",
-    type=str,
-    default="none",
-    choices=("none", "operator"),
-    help="Show one operator dashboard with external, head, and wrist cameras.",
-)
-parser.add_argument(
     "--publish_camera_topics",
     action="store_true",
     help="Publish compressed camera topics while recording. HDF5 camera recording does not require this.",
@@ -92,8 +78,6 @@ parser.add_argument(
 AppLauncher.add_app_launcher_args(parser)
 # parse the arguments
 args_cli = parser.parse_args()
-if args_cli.camera_view != "none":
-    args_cli.enable_cameras = True
 
 app_launcher_args = vars(args_cli)
 
@@ -279,78 +263,6 @@ def release_camera_sensors_before_close(env) -> None:
             registry.clear()
 
 
-def _camera_rgb(env, camera_name: str) -> torch.Tensor:
-    """Return one camera's first RGB image without copying it off the GPU."""
-    image = env.scene.sensors[camera_name].data.output["rgb"]
-    if image.ndim == 4:
-        image = image[0]
-    return image[..., :3]
-
-
-def _make_operator_dashboard(env, gap: int = 8):
-    """Allocate a reusable native-resolution dashboard and its panel layout."""
-    rows = (
-        (
-            ("cam_overhead_left", "External Left"),
-            ("cam_overhead_center", "External Top"),
-            ("cam_overhead_right", "External Right"),
-        ),
-        (("cam_wrist_left", "Wrist Left"), ("cam_head", "Head"), ("cam_wrist_right", "Wrist Right")),
-    )
-    panel_sizes = {}
-    first_image = None
-    for row in rows:
-        for camera_name, _ in row:
-            image = _camera_rgb(env, camera_name)
-            if first_image is None:
-                first_image = image
-            elif image.device != first_image.device or image.dtype != first_image.dtype:
-                raise ValueError("Operator dashboard cameras must use the same device and pixel dtype.")
-            panel_sizes[camera_name] = (int(image.shape[1]), int(image.shape[0]))
-
-    row_widths = [
-        sum(panel_sizes[camera_name][0] for camera_name, _ in row) + gap * (len(row) - 1)
-        for row in rows
-    ]
-    row_heights = [max(panel_sizes[camera_name][1] for camera_name, _ in row) for row in rows]
-    canvas_width = max(row_widths)
-    canvas_height = sum(row_heights) + gap * (len(rows) - 1)
-    background = 18 if not first_image.dtype.is_floating_point else 18.0 / 255.0
-    canvas = torch.full(
-        (canvas_height, canvas_width, 3),
-        background,
-        dtype=first_image.dtype,
-        device=first_image.device,
-    )
-
-    layout = {}
-    labels = []
-    row_y = 0
-    for row, row_width, row_height in zip(rows, row_widths, row_heights):
-        panel_x = (canvas_width - row_width) // 2
-        for camera_name, label in row:
-            panel_width, panel_height = panel_sizes[camera_name]
-            panel_y = row_y + (row_height - panel_height) // 2
-            layout[camera_name] = (panel_x, panel_y, panel_width, panel_height)
-            labels.append((label, panel_x, panel_y))
-            panel_x += panel_width + gap
-        row_y += row_height + gap
-
-    return canvas, layout, tuple(labels)
-
-
-def _update_operator_dashboard(env, canvas: torch.Tensor, layout) -> None:
-    """Place the latest camera tensors into the cached dashboard canvas."""
-    for camera_name, (panel_x, panel_y, panel_width, panel_height) in layout.items():
-        image = _camera_rgb(env, camera_name)
-        if image.shape[:2] != (panel_height, panel_width):
-            raise ValueError(
-                f"Camera {camera_name} changed size from {panel_width}x{panel_height} "
-                f"to {image.shape[1]}x{image.shape[0]}."
-            )
-        canvas[panel_y : panel_y + panel_height, panel_x : panel_x + panel_width].copy_(image)
-
-
 def main():
     """Running cyclo_lab teleoperation with cyclo_lab manipulation environment."""
 
@@ -363,26 +275,6 @@ def main():
 
     env_cfg = parse_env_cfg(args_cli.task, device=args_cli.device, num_envs=1)
     env_cfg.init_action_cfg("record")
-    if hasattr(env_cfg, "set_camera_set"):
-        env_cfg.set_camera_set(args_cli.camera_set)
-    elif args_cli.camera_set != "all":
-        print(f"[WARN] Task {args_cli.task} does not support --camera_set; using its default cameras.")
-    if args_cli.camera_view == "operator":
-        if not hasattr(env_cfg, "enable_operator_preview_cameras"):
-            raise ValueError(f"Task {args_cli.task} does not support the operator camera dashboard.")
-        env_cfg.enable_operator_preview_cameras()
-        required_operator_cameras = ("cam_head", "cam_wrist_left", "cam_wrist_right")
-        missing_operator_cameras = [
-            camera_name
-            for camera_name in required_operator_cameras
-            if getattr(env_cfg.scene, camera_name, None) is None
-        ]
-        if missing_operator_cameras:
-            raise ValueError(
-                "--camera_view operator requires --camera_set all; missing "
-                + ", ".join(missing_operator_cameras)
-                + "."
-            )
     env_cfg.seed = args_cli.seed
     task_name = args_cli.task
 
@@ -480,30 +372,6 @@ def main():
     env.reset()
     teleop_interface.reset()
 
-    operator_dashboard_preview = None
-    operator_dashboard_frame = None
-    operator_dashboard_layout = None
-    preview_step_count = 0
-    preview_capture_interval = int(getattr(env_cfg, "camera_capture_interval_steps", 1))
-    if args_cli.camera_view == "operator":
-        from cyclo_lab.runtime.viewers import SharedMemoryCameraPreview
-
-        operator_dashboard_frame, operator_dashboard_layout, panel_labels = _make_operator_dashboard(env)
-        dashboard_height, dashboard_width = operator_dashboard_frame.shape[:2]
-        operator_dashboard_preview = SharedMemoryCameraPreview(
-            width=dashboard_width,
-            height=dashboard_height,
-            window_title="SG2 Operator Dashboard",
-            window_size=min(dashboard_width, 1800),
-            window_position=(20, 20),
-            panel_labels=panel_labels,
-        )
-        print(
-            f"[Camera Preview] operator dashboard {dashboard_width}x{dashboard_height}: "
-            "external left/top/right + wrist left/head/wrist right "
-            f"at {getattr(env_cfg, 'camera_render_hz', 0.0):g} Hz"
-        )
-
     current_recorded_demo_count = 0
 
     should_start_recording_instance = False
@@ -598,16 +466,6 @@ def main():
                             actions = actions.unsqueeze(0)
                         with profiler.time("env_step"):
                             env.step(actions)
-                if preview_step_count % preview_capture_interval == 0:
-                    if operator_dashboard_preview is not None:
-                        with profiler.time("camera_preview_dashboard"):
-                            _update_operator_dashboard(
-                                env,
-                                operator_dashboard_frame,
-                                operator_dashboard_layout,
-                            )
-                            operator_dashboard_preview.update(operator_dashboard_frame)
-                preview_step_count += 1
                 if rate_limiter:
                     with profiler.time("rate_sleep"):
                         rate_limiter.sleep()
@@ -615,8 +473,6 @@ def main():
 
     # close the simulator
     teleop_interface.shutdown()
-    if operator_dashboard_preview is not None:
-        operator_dashboard_preview.close()
     profiler.remove_hooks()
     release_camera_sensors_before_close(env)
     env.close()

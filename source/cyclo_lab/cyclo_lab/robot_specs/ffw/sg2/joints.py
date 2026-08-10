@@ -30,3 +30,27 @@ FFW_SG2_ACTION_JOINT_NAMES = (
     *FFW_SG2_LIFT_JOINT_NAMES,
     *FFW_SG2_HEAD_JOINT_NAMES,
 )
+
+# Physical position limits from the shipped SG2 articulation. Topic bridges use
+# this table as the final safety boundary for absolute joint targets.
+FFW_SG2_JOINT_POSITION_LIMITS = {
+    "arm_l_joint1": (-3.14, 3.14),
+    "arm_l_joint2": (0.0, 3.14),
+    "arm_l_joint3": (-3.14, 3.14),
+    "arm_l_joint4": (-2.9361, 1.0786),
+    "arm_l_joint5": (-3.14, 3.14),
+    "arm_l_joint6": (-1.57, 1.57),
+    "arm_l_joint7": (-1.8201, 1.5804),
+    "gripper_l_joint1": (0.0, 1.1),
+    "arm_r_joint1": (-3.14, 3.14),
+    "arm_r_joint2": (-3.14, 0.0),
+    "arm_r_joint3": (-3.14, 3.14),
+    "arm_r_joint4": (-2.9361, 1.0786),
+    "arm_r_joint5": (-3.14, 3.14),
+    "arm_r_joint6": (-1.57, 1.57),
+    "arm_r_joint7": (-1.5804, 1.8201),
+    "gripper_r_joint1": (0.0, 1.1),
+    "lift_joint": (-0.5, 0.0),
+    "head_joint1": (-0.2317, 0.6951),
+    "head_joint2": (-0.35, 0.35),
+}

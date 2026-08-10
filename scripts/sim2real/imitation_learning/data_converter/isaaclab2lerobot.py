@@ -54,57 +54,26 @@ ROBOT_CONFIGS = {
             "cam_head": {"height": 376, "width": 672},
         }
     },
-    "FFW_SG2_SHOWROOM": {
-        "action_dim": 22,
-        "state_dim": 22,
-        "action_names": [*FFW_SG2_PUBLISHED_JOINT_NAMES, "linear_x", "linear_y", "angular_z"],
-        "state_names": [
-            *FFW_SG2_PUBLISHED_JOINT_NAMES,
-            "linear_x", "linear_y", "angular_z",
-        ],
-        "cameras": {
-            "cam_head": {
-                "height": 720,
-                "width": 1280,
-                "feature_key": "observation.images.rgb.cam_left_head",
-            },
-            "cam_wrist_left": {
-                "height": 480,
-                "width": 640,
-                "feature_key": "observation.images.rgb.cam_left_wrist",
-            },
-            "cam_wrist_right": {
-                "height": 480,
-                "width": 640,
-                "feature_key": "observation.images.rgb.cam_right_wrist",
-            },
-        }
-    }
 }
 
 
 def _ffw_sg2_action_to_lerobot(actions: np.ndarray) -> np.ndarray:
     """Convert Isaac Lab SG2 actions into the published/LeRobot joint order."""
-    if actions.ndim != 2 or actions.shape[1] not in (19, 22):
-        raise ValueError(f"FFW_SG2 actions must have shape [N, 19] or [N, 22], got {tuple(actions.shape)}.")
+    if actions.ndim != 2 or actions.shape[1] != 19:
+        raise ValueError(f"FFW_SG2 actions must have shape [N, 19], got {tuple(actions.shape)}.")
 
     # HDF5 actions follow Isaac Lab action-term order:
-    # [arm_l, gripper_l, arm_r, gripper_r, lift, head(2), optional base_cmd(3)].
+    # [arm_l, gripper_l, arm_r, gripper_r, lift, head(2)].
     # WoodBlock LeRobot datasets use:
-    # [arm_l, gripper_l, arm_r, gripper_r, head(2), lift, optional base_cmd(3)].
+    # [arm_l, gripper_l, arm_r, gripper_r, head(2), lift].
     return np.concatenate(
         [
             actions[:, :16],
             actions[:, 17:19],
             actions[:, 16:17],
-            actions[:, 19:],
         ],
         axis=-1,
     )
-
-
-def _camera_feature_key(camera_name: str, camera_cfg: dict) -> str:
-    return camera_cfg.get("feature_key", f"observation.images.{camera_name}")
 
 
 def get_env_features(fps: int, robot_type: str, camera_shapes: dict[str, dict[str, int]] | None = None):
@@ -114,22 +83,17 @@ def get_env_features(fps: int, robot_type: str, camera_shapes: dict[str, dict[st
     config = ROBOT_CONFIGS[robot_type]
     camera_shapes = camera_shapes or {}
     
-    action_dim = config["action_dim"] if "action_dim" in config else config["expected_dim"]
-    state_dim = config["state_dim"] if "state_dim" in config else config["expected_dim"]
-    action_names = config["action_names"] if "action_names" in config else config["joint_names"]
-    state_names = config["state_names"] if "state_names" in config else config["joint_names"]
-
     # Build action and observation.state features
     features = {
         "action": {
             "dtype": "float32",
-            "shape": (action_dim,),
-            "names": action_names,
+            "shape": (config["expected_dim"],),
+            "names": config["joint_names"],
         },
         "observation.state": {
             "dtype": "float32",
-            "shape": (state_dim,),
-            "names": state_names,
+            "shape": (config["expected_dim"],),
+            "names": config["joint_names"],
         }
     }
     
@@ -138,7 +102,7 @@ def get_env_features(fps: int, robot_type: str, camera_shapes: dict[str, dict[st
         cam_shape = camera_shapes.get(cam_name, {})
         height = int(cam_shape.get("height", cam_cfg["height"]))
         width = int(cam_shape.get("width", cam_cfg["width"]))
-        features[_camera_feature_key(cam_name, cam_cfg)] = {
+        features[f"observation.images.{cam_name}"] = {
             "dtype": "video",
             "shape": [height, width, 3],
             "names": ["height", "width", "channels"],
@@ -291,15 +255,10 @@ def process_data(
         # Load action and state data
         actions = np.array(demo_group['actions'], dtype=np.float32)
         joint_pos = np.array(demo_group['obs/joint_pos'], dtype=np.float32)
-        if robot_type == "FFW_SG2_SHOWROOM":
-            base_twist = np.array(demo_group['obs/base_twist'], dtype=np.float32)
-            joint_pos = np.concatenate([joint_pos, base_twist], axis=-1)
-        
-        # Keep camera datasets lazy. Showroom recordings contain high-resolution
-        # images and loading every camera into RAM at once is unnecessarily heavy.
+        # Keep camera datasets lazy to avoid loading every image into RAM at once.
         camera_data = {}
-        for cam_key, cam_cfg in camera_items:
-            camera_data[_camera_feature_key(cam_key, cam_cfg)] = demo_group[f'obs/{cam_key}']
+        for cam_key, _cam_cfg in camera_items:
+            camera_data[f"observation.images.{cam_key}"] = demo_group[f'obs/{cam_key}']
             
     except KeyError as e:
         print(f"Demo {demo_name} is not valid (missing key: {e}), skipping...")
@@ -310,13 +269,11 @@ def process_data(
         return False
 
     # Ensure actions and joint positions are 2D arrays
-    action_dim = config["action_dim"] if "action_dim" in config else config["expected_dim"]
-    state_dim = config["state_dim"] if "state_dim" in config else config["expected_dim"]
     if actions.ndim == 1:
-        actions = actions.reshape(-1, action_dim)
+        actions = actions.reshape(-1, config["expected_dim"])
     if joint_pos.ndim == 1:
-        joint_pos = joint_pos.reshape(-1, state_dim)
-    if robot_type in ("FFW_SG2", "FFW_SG2_SHOWROOM"):
+        joint_pos = joint_pos.reshape(-1, config["expected_dim"])
+    if robot_type == "FFW_SG2":
         actions = _ffw_sg2_action_to_lerobot(actions)
     
     total_state_frames = actions.shape[0]
@@ -421,7 +378,15 @@ if __name__ == "__main__":
     parser.add_argument("--task", type=str, required=True, help="Task name (e.g., OMY_Pickup)")
     parser.add_argument("--robot_type", type=str, default="OMY", help="Robot type (default: OMY)")
     parser.add_argument("--dataset_file", type=str, default="./datasets/dataset.hdf5", help="Path to dataset HDF5 file")
-    parser.add_argument("--fps", type=int, default=10, help="Frames per second for dataset (default: 10)")
+    parser.add_argument(
+        "--fps",
+        type=int,
+        default=10,
+        help=(
+            "Target LeRobot dataset rate in Hz. With --resample_by_time, timestamps are resampled "
+            "onto this rate (default: 10)."
+        ),
+    )
     parser.add_argument("--push_to_hub", action="store_true", help="Whether to push dataset to HuggingFace Hub")
     parser.add_argument(
         "--frame_skip",

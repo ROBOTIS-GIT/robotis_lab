@@ -1,1 +1,1 @@
-"""Isaac Sim runtime bridge applications."""
+"""Runtime bridges between Isaac Lab environments and external transports."""

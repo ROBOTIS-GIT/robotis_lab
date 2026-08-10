@@ -1,5 +1,5 @@
 """Lightweight runtime viewers."""
 
-from .camera_preview import SharedMemoryCameraPreview
+from .camera_preview import CameraDashboard, SharedMemoryCameraPreview
 
-__all__ = ["SharedMemoryCameraPreview"]
+__all__ = ["CameraDashboard", "SharedMemoryCameraPreview"]

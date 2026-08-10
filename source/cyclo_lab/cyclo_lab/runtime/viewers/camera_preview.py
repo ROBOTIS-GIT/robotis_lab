@@ -11,6 +11,7 @@ import subprocess
 from multiprocessing import shared_memory
 
 import numpy as np
+import torch
 
 
 _FRAME_OFFSET = 64
@@ -153,3 +154,100 @@ class SharedMemoryCameraPreview:
             self._shared_memory.unlink()
         except FileNotFoundError:
             pass
+
+
+def _camera_rgb(env, camera_name: str) -> torch.Tensor:
+    image = env.scene.sensors[camera_name].data.output["rgb"]
+    if image.ndim == 4:
+        image = image[0]
+    return image[..., :3]
+
+
+class CameraDashboard:
+    """Compose native-resolution Isaac Lab camera tensors into one preview."""
+
+    def __init__(
+        self,
+        env,
+        *,
+        rows: tuple[tuple[tuple[str, str], ...], ...],
+        panel_rotations: dict[str, int] | None = None,
+        gap: int = 8,
+        window_title: str = "Camera Dashboard",
+        window_size: int = 1800,
+        window_position: tuple[int, int] | None = None,
+    ) -> None:
+        if not rows or any(not row for row in rows):
+            raise ValueError("Camera dashboard rows must not be empty.")
+        self._env = env
+        self._panel_rotations = {
+            camera_name: int(quarter_turns) % 4
+            for camera_name, quarter_turns in (panel_rotations or {}).items()
+        }
+        panel_sizes = {}
+        first_image = None
+        for row in rows:
+            for camera_name, _ in row:
+                image = _camera_rgb(env, camera_name)
+                if first_image is None:
+                    first_image = image
+                elif image.device != first_image.device or image.dtype != first_image.dtype:
+                    raise ValueError("Dashboard cameras must use the same device and pixel dtype.")
+                image_height, image_width = int(image.shape[0]), int(image.shape[1])
+                if self._panel_rotations.get(camera_name, 0) % 2:
+                    image_height, image_width = image_width, image_height
+                panel_sizes[camera_name] = (image_width, image_height)
+
+        row_widths = [
+            sum(panel_sizes[camera_name][0] for camera_name, _ in row) + gap * (len(row) - 1)
+            for row in rows
+        ]
+        row_heights = [max(panel_sizes[camera_name][1] for camera_name, _ in row) for row in rows]
+        self.width = max(row_widths)
+        self.height = sum(row_heights) + gap * (len(rows) - 1)
+        background = 18 if not first_image.dtype.is_floating_point else 18.0 / 255.0
+        self._frame = torch.full(
+            (self.height, self.width, 3),
+            background,
+            dtype=first_image.dtype,
+            device=first_image.device,
+        )
+
+        self._layout = {}
+        labels = []
+        row_y = 0
+        for row, row_width, row_height in zip(rows, row_widths, row_heights):
+            panel_x = (self.width - row_width) // 2
+            for camera_name, label in row:
+                panel_width, panel_height = panel_sizes[camera_name]
+                panel_y = row_y + (row_height - panel_height) // 2
+                self._layout[camera_name] = (panel_x, panel_y, panel_width, panel_height)
+                labels.append((label, panel_x, panel_y))
+                panel_x += panel_width + gap
+            row_y += row_height + gap
+
+        self._preview = SharedMemoryCameraPreview(
+            width=self.width,
+            height=self.height,
+            window_title=window_title,
+            window_size=min(self.width, int(window_size)),
+            window_position=window_position,
+            panel_labels=tuple(labels),
+        )
+
+    def update(self) -> None:
+        for camera_name, (panel_x, panel_y, panel_width, panel_height) in self._layout.items():
+            image = _camera_rgb(self._env, camera_name)
+            quarter_turns = self._panel_rotations.get(camera_name, 0)
+            if quarter_turns:
+                image = torch.rot90(image, k=quarter_turns, dims=(0, 1))
+            if image.shape[:2] != (panel_height, panel_width):
+                raise ValueError(
+                    f"Camera {camera_name} changed size from {panel_width}x{panel_height} "
+                    f"to {image.shape[1]}x{image.shape[0]}."
+                )
+            self._frame[panel_y : panel_y + panel_height, panel_x : panel_x + panel_width].copy_(image)
+        self._preview.update(self._frame)
+
+    def close(self) -> None:
+        self._preview.close()
