@@ -294,11 +294,12 @@ FFW_SG2_CFG = ArticulationCfg(
             stiffness=100.0,
             damping=4.0,
         ),
-        "gripper_slave": ImplicitActuatorCfg(
+        "gripper_passive": ImplicitActuatorCfg(
             joint_names_expr=["gripper_l_joint[2-4]", "gripper_r_joint[2-4]"],
-            effort_limit_sim=20.0,
-            stiffness=2.0,
-            damping=0.5,
+            velocity_limit_sim=10.0,
+            effort_limit_sim=1.0,
+            stiffness=0.0,
+            damping=0.0,
         ),
 
         # Actuators for head joints
