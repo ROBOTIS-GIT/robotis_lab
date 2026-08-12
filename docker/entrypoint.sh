@@ -14,5 +14,9 @@ if [ ! -L "${ISAACLAB_PATH}/_isaac_sim" ]; then
     ln -sf ${ISAACSIM_ROOT_PATH} ${ISAACLAB_PATH}/_isaac_sim
 fi
 
+# The repository is bind-mounted at runtime, so reapply local Isaac Lab fixes
+# after mounts replace the sources baked into the image.
+bash "${CYCLOLAB_PATH}/docker/apply_isaaclab_patches.sh"
+
 # Execute the command passed to docker run
 exec "$@"

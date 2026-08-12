@@ -25,6 +25,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import torch
+import warp as wp
 from isaaclab.assets import Articulation, RigidObject
 from isaaclab.managers import SceneEntityCfg
 
@@ -50,8 +51,9 @@ def reference_anchor_gravity_deviation(
 ) -> torch.Tensor:
     asset: RigidObject | Articulation = env.scene[asset_cfg.name]
     command: ReferenceTrajectoryCommand = env.command_manager.get_term(command_name)
-    reference_projected_gravity_b = quat_apply_inverse(command.anchor_quat_w, asset.data.GRAVITY_VEC_W)
-    robot_projected_gravity_b = quat_apply_inverse(command.robot_anchor_quat_w, asset.data.GRAVITY_VEC_W)
+    gravity_vec_w = wp.to_torch(asset.data.GRAVITY_VEC_W)
+    reference_projected_gravity_b = quat_apply_inverse(command.anchor_quat_w, gravity_vec_w)
+    robot_projected_gravity_b = quat_apply_inverse(command.robot_anchor_quat_w, gravity_vec_w)
     return (reference_projected_gravity_b[:, 2] - robot_projected_gravity_b[:, 2]).abs() > threshold
 
 
@@ -66,16 +68,22 @@ def reference_body_height_deviation(
     return torch.any(error > threshold, dim=-1)
 
 
-def physx_nan_detected(
+def nan_detected(
     env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
 ) -> torch.Tensor:
     asset: Articulation = env.scene[asset_cfg.name]
     data = asset.data
+    joint_pos = wp.to_torch(data.joint_pos)
+    joint_vel = wp.to_torch(data.joint_vel)
+    root_pos_w = wp.to_torch(data.root_pos_w)
+    root_quat_w = wp.to_torch(data.root_quat_w)
+    root_lin_vel_w = wp.to_torch(data.root_lin_vel_w)
+    root_ang_vel_w = wp.to_torch(data.root_ang_vel_w)
     return (
-        torch.any(torch.isnan(data.joint_pos[:, asset_cfg.joint_ids]), dim=1)
-        | torch.any(torch.isnan(data.joint_vel[:, asset_cfg.joint_ids]), dim=1)
-        | torch.any(torch.isnan(data.root_pos_w), dim=1)
-        | torch.any(torch.isnan(data.root_quat_w), dim=1)
-        | torch.any(torch.isnan(data.root_lin_vel_w), dim=1)
-        | torch.any(torch.isnan(data.root_ang_vel_w), dim=1)
+        torch.any(torch.isnan(joint_pos[:, asset_cfg.joint_ids]), dim=1)
+        | torch.any(torch.isnan(joint_vel[:, asset_cfg.joint_ids]), dim=1)
+        | torch.any(torch.isnan(root_pos_w), dim=1)
+        | torch.any(torch.isnan(root_quat_w), dim=1)
+        | torch.any(torch.isnan(root_lin_vel_w), dim=1)
+        | torch.any(torch.isnan(root_ang_vel_w), dim=1)
     )

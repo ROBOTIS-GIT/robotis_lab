@@ -34,6 +34,12 @@ parser.add_argument(
     help="Use the pre-trained checkpoint from Nucleus.",
 )
 parser.add_argument("--real-time", action="store_true", default=False, help="Run in real-time, if possible.")
+parser.add_argument(
+    "--mouse_drag",
+    action="store_true",
+    default=False,
+    help="Apply Newton viewer right-click dragging forces during playback.",
+)
 # append RSL-RL cli arguments
 cli_args.add_rsl_rl_args(parser)
 # append AppLauncher cli args
@@ -41,6 +47,16 @@ AppLauncher.add_app_launcher_args(parser)
 # parse the arguments
 args_cli, hydra_args = parser.parse_known_args()
 cli_args.validate_task_exists(args_cli.task)
+# Isaac Lab 3 defaults to headless when no visualizer is selected. Newton
+# playback uses its native visualizer by default, while callers can still force
+# headless with ``--viz none``.
+if (
+    args_cli.visualizer is None
+    and not getattr(args_cli, "visualizer_explicit", False)
+    and not args_cli.headless
+):
+    args_cli.visualizer = ["newton"]
+    args_cli.visualizer_explicit = True
 # always enable cameras to record video
 if args_cli.video:
     args_cli.enable_cameras = True
@@ -48,7 +64,8 @@ if args_cli.video:
 # clear out sys.argv for Hydra
 sys.argv = [sys.argv[0]] + hydra_args
 
-# launch omniverse app
+# Launch Kit before importing task configurations. K1's URDF converter needs
+# Kit's USD modules, while SimulationCfg.physics still selects Newton dynamics.
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
@@ -105,8 +122,91 @@ import cyclo_lab  # noqa: F401
 # PLACEHOLDER: Extension template (do not remove this comment)
 
 
-@hydra_task_config(args_cli.task, args_cli.agent)
-def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agent_cfg: RslRlBaseRunnerCfg):
+def _embed_onnx_external_data(model_path: str):
+    """Rewrite an ONNX export as one self-contained file."""
+    import onnx
+
+    model_metadata = onnx.load(model_path, load_external_data=False)
+    external_locations = {
+        entry.value
+        for tensor in model_metadata.graph.initializer
+        for entry in tensor.external_data
+        if entry.key == "location"
+    }
+    if not external_locations:
+        return
+
+    model = onnx.load(model_path, load_external_data=True)
+    temporary_path = f"{model_path}.embedded.tmp"
+    try:
+        onnx.save_model(model, temporary_path, save_as_external_data=False)
+        embedded_model = onnx.load(temporary_path, load_external_data=False)
+        if any(tensor.external_data for tensor in embedded_model.graph.initializer):
+            raise RuntimeError(f"Failed to embed all ONNX external data into: {model_path}")
+        onnx.checker.check_model(embedded_model, full_check=True)
+        os.replace(temporary_path, model_path)
+    finally:
+        if os.path.exists(temporary_path):
+            os.remove(temporary_path)
+
+    model_dir = os.path.realpath(os.path.dirname(model_path))
+    for location in external_locations:
+        external_path = os.path.realpath(os.path.join(model_dir, location))
+        if os.path.commonpath((model_dir, external_path)) == model_dir and os.path.isfile(external_path):
+            os.remove(external_path)
+
+    print(f"[INFO]: Embedded ONNX weights into a single file: {model_path}", flush=True)
+
+
+def _load_checkpoint(runner: OnPolicyRunner | DistillationRunner, checkpoint_path: str):
+    """Load current RSL-RL checkpoints and legacy combined actor-critic checkpoints."""
+    checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+    if "model_state_dict" not in checkpoint:
+        runner.load(checkpoint_path)
+        return
+
+    if not isinstance(runner, OnPolicyRunner):
+        raise ValueError("Legacy model_state_dict checkpoints are only supported for OnPolicyRunner.")
+
+    legacy_state = checkpoint["model_state_dict"]
+    actor_state = {
+        f"mlp.{name.removeprefix('actor.')}": value
+        for name, value in legacy_state.items()
+        if name.startswith("actor.")
+    }
+    critic_state = {
+        f"mlp.{name.removeprefix('critic.')}": value
+        for name, value in legacy_state.items()
+        if name.startswith("critic.")
+    }
+
+    actor_keys = runner.alg.actor.state_dict().keys()
+    if "std" in legacy_state and "distribution.std_param" in actor_keys:
+        actor_state["distribution.std_param"] = legacy_state["std"]
+
+    runner.alg.actor.load_state_dict(actor_state, strict=True)
+    runner.alg.critic.load_state_dict(critic_state, strict=True)
+    runner.current_learning_iteration = checkpoint.get("iter", 0)
+    print("[INFO]: Loaded legacy combined actor-critic checkpoint.", flush=True)
+
+
+def _resolve_newton_mouse_drag(env):
+    """Return the active Newton viewer and state accessor used for mouse picking."""
+    try:
+        from isaaclab_newton.physics import NewtonManager
+    except ImportError as exc:
+        raise RuntimeError("--mouse_drag requires the Newton backend.") from exc
+
+    for visualizer in env.unwrapped.sim.visualizers:
+        viewer = getattr(visualizer, "_viewer", None)
+        if viewer is not None and hasattr(viewer, "apply_forces"):
+            viewer.picking_enabled = True
+            return viewer, NewtonManager.get_state_0
+
+    raise RuntimeError("--mouse_drag requires an active Newton visualizer. Run play with '--viz newton'.")
+
+
+def _run(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agent_cfg: RslRlBaseRunnerCfg):
     """Play with RSL-RL agent."""
     # grab task name for checkpoint path
     task_name = args_cli.task.split(":")[-1]
@@ -165,7 +265,16 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     # wrap around environment for rsl-rl
     env = RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
 
-    print(f"[INFO]: Loading model checkpoint from: {resume_path}")
+    mouse_drag_viewer = None
+    newton_state = None
+    if args_cli.mouse_drag:
+        mouse_drag_viewer, newton_state = _resolve_newton_mouse_drag(env)
+        print(
+            "[INFO]: Newton mouse dragging enabled: right-click a robot body and drag it; release to stop.",
+            flush=True,
+        )
+
+    print(f"[INFO]: Loading model checkpoint from: {resume_path}", flush=True)
     # load previously trained model
     if agent_cfg.class_name == "OnPolicyRunner":
         runner = OnPolicyRunner(env, agent_cfg.to_dict(), log_dir=None, device=agent_cfg.device)
@@ -173,7 +282,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
         runner = DistillationRunner(env, agent_cfg.to_dict(), log_dir=None, device=agent_cfg.device)
     else:
         raise ValueError(f"Unsupported runner class: {agent_cfg.class_name}")
-    runner.load(resume_path)
+    _load_checkpoint(runner, resume_path)
 
     # obtain the trained policy for inference
     policy = runner.get_inference_policy(device=env.unwrapped.device)
@@ -207,6 +316,8 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
         # export to JIT and ONNX
         export_policy_as_jit(policy_nn, normalizer=normalizer, path=export_model_dir, filename="policy.pt")
         export_policy_as_onnx(policy_nn, normalizer=normalizer, path=export_model_dir, filename="policy.onnx")
+    _embed_onnx_external_data(os.path.join(export_model_dir, "policy.onnx"))
+    print(f"[INFO]: Exported policy to: {export_model_dir}", flush=True)
 
     dt = env.unwrapped.step_dt
 
@@ -214,12 +325,14 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     obs = env.get_observations()
     timestep = 0
     # simulate environment
-    while simulation_app.is_running():
+    while True:
         start_time = time.time()
         # run everything in inference mode
         with torch.inference_mode():
             # agent stepping
             actions = policy(obs)
+            if mouse_drag_viewer is not None:
+                mouse_drag_viewer.apply_forces(newton_state())
             # env stepping
             obs, _, dones, _ = env.step(actions)
             # reset recurrent states for episodes that have terminated
@@ -242,8 +355,15 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     env.close()
 
 
+@hydra_task_config(args_cli.task, args_cli.agent)
+def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agent_cfg: RslRlBaseRunnerCfg):
+    """Play using the physics backend selected by the task config."""
+    _run(env_cfg, agent_cfg)
+
+
 if __name__ == "__main__":
     # run the main function
-    main()
-    # close sim app
-    simulation_app.close()
+    try:
+        main()
+    finally:
+        simulation_app.close()

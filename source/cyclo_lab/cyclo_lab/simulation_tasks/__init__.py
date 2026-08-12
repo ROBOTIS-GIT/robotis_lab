@@ -15,7 +15,8 @@ from isaaclab_tasks.utils import import_packages
 ##
 
 
-# The blacklist is used to prevent importing configs from sub-packages
-_BLACKLIST_PKGS = ["utils"]
-# Import all configs in this package
+# Only K1 locomotion and mimic tasks are supported on this branch. Skipping the
+# manipulation tree also prevents loading OMY/FFW and their teleop dependencies.
+_BLACKLIST_PKGS = ["utils", "manipulation"]
+# Import the supported K1 configs in this package.
 import_packages(__name__, _BLACKLIST_PKGS)

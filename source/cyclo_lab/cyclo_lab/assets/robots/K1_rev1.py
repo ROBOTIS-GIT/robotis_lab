@@ -50,9 +50,17 @@ K1_REV1_CFG = ArticulationCfg(
         asset_path=K1_REV1_URDF_PATH,
         activate_contact_sensors=True,
         fix_base=False,
+        self_collision=True,
         replace_cylinders_with_capsules=True,
         joint_drive=sim_utils.UrdfConverterCfg.JointDriveCfg(
-            gains=sim_utils.UrdfConverterCfg.JointDriveCfg.PDGainsCfg(stiffness=0, damping=0)
+            # Newton infers the native joint target mode while importing the
+            # converted USD. A zero-gain drive is permanently classified as
+            # EFFORT, so later ImplicitActuator gain updates cannot make its
+            # position targets active. Seed a non-zero position drive here;
+            # Isaac Lab replaces these placeholders with the per-joint gains
+            # below when the articulation is initialized.
+            target_type="position",
+            gains=sim_utils.UrdfConverterCfg.JointDriveCfg.PDGainsCfg(stiffness=1.0, damping=1.0),
         ),
         rigid_props=sim_utils.RigidBodyPropertiesCfg(
             disable_gravity=False,
@@ -199,10 +207,15 @@ K1_REV1_INERTIA_TUNED_CFG = ArticulationCfg(
     spawn=sim_utils.UrdfFileCfg(
         asset_path=K1_REV1_URDF_PATH,
         fix_base=False,
+        self_collision=True,
         activate_contact_sensors=True,
         replace_cylinders_with_capsules=True,
         joint_drive=sim_utils.UrdfConverterCfg.JointDriveCfg(
-            gains=sim_utils.UrdfConverterCfg.JointDriveCfg.PDGainsCfg(stiffness=0.0, damping=0.0)
+            # Seed a position drive so Newton imports these joints in position
+            # target mode. The per-joint implicit actuator gains below replace
+            # these placeholders when the articulation is initialized.
+            target_type="position",
+            gains=sim_utils.UrdfConverterCfg.JointDriveCfg.PDGainsCfg(stiffness=1.0, damping=1.0),
         ),
         articulation_props=sim_utils.ArticulationRootPropertiesCfg(
             enabled_self_collisions=True,

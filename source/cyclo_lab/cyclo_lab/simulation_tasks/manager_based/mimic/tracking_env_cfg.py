@@ -39,9 +39,10 @@ from isaaclab.terrains import TerrainImporterCfg
 # Pre-defined configs
 ##
 from isaaclab.utils import configclass
-from isaaclab.utils.noise import AdditiveUniformNoiseCfg as Unoise
+from isaaclab.utils.noise import UniformNoiseCfg as Unoise
 
 import cyclo_lab.simulation_tasks.manager_based.mimic.mdp as mdp
+from cyclo_lab.utils.newton import make_newton_cfg
 
 ##
 # Scene definition
@@ -188,17 +189,8 @@ class EventCfg:
     """Configuration for events."""
 
     # startup
-    physics_material = EventTerm(
-        func=mdp.randomize_rigid_body_material,
-        mode="startup",
-        params={
-            "asset_cfg": SceneEntityCfg("robot", body_names=".*"),
-            "static_friction_range": (0.3, 1.6),
-            "dynamic_friction_range": (0.3, 1.2),
-            "restitution_range": (0.0, 0.5),
-            "num_buckets": 64,
-        },
-    )
+    # Runtime material randomization is currently unsupported by Newton.
+    physics_material = None
 
     joint_home_offset_noise = EventTerm(
         func=mdp.apply_home_joint_offset_noise,
@@ -296,7 +288,7 @@ class TerminationsCfg:
         func=mdp.joint_vel_out_of_manual_limit,
         params={"max_velocity": 100.0, "asset_cfg": SceneEntityCfg("robot", joint_names=".*")},
     )
-    physx_nan = DoneTerm(func=mdp.physx_nan_detected, params={"asset_cfg": SceneEntityCfg("robot", joint_names=".*")})
+    nan_detected = DoneTerm(func=mdp.nan_detected, params={"asset_cfg": SceneEntityCfg("robot", joint_names=".*")})
 
 
 @configclass
@@ -338,4 +330,8 @@ class TrackingEnvCfg(ManagerBasedRLEnvCfg):
         self.sim.dt = 0.005
         self.sim.render_interval = self.decimation
         self.sim.physics_material = self.scene.terrain.physics_material
-        self.sim.physx.gpu_max_rigid_patch_count = 10 * 2**15
+        # Route position targets through Newton's native actuator pipeline.
+        self.sim.use_newton_actuators = True
+        # K1 can create many constraint rows during falls and self-collision.
+        # Keep the same overflow headroom used by the velocity task.
+        self.sim.physics = make_newton_cfg(njmax=512, nconmax=64)

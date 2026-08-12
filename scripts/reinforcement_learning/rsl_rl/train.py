@@ -48,7 +48,8 @@ if args_cli.video:
 # clear out sys.argv for Hydra
 sys.argv = [sys.argv[0]] + hydra_args
 
-# launch omniverse app
+# Launch Kit before importing task configurations. K1's URDF converter needs
+# Kit's USD modules, while SimulationCfg.physics still selects Newton dynamics.
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
@@ -60,7 +61,7 @@ import platform
 from packaging import version
 
 # check minimum supported rsl-rl version
-RSL_RL_VERSION = "3.0.1"
+RSL_RL_VERSION = "5.0.1"
 installed_version = metadata.version("rsl-rl-lib")
 if version.parse(installed_version) < version.parse(RSL_RL_VERSION):
     if platform.system() == "Windows":
@@ -122,8 +123,7 @@ torch.backends.cudnn.deterministic = False
 torch.backends.cudnn.benchmark = False
 
 
-@hydra_task_config(args_cli.task, args_cli.agent)
-def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agent_cfg: RslRlBaseRunnerCfg):
+def _run(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agent_cfg: RslRlBaseRunnerCfg):
     """Train with RSL-RL agent."""
     # override configurations with non-hydra CLI arguments
     agent_cfg = cli_args.update_rsl_rl_cfg(agent_cfg, args_cli)
@@ -148,11 +148,13 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 
     # multi-gpu training configuration
     if args_cli.distributed:
-        env_cfg.sim.device = f"cuda:{app_launcher.local_rank}"
-        agent_cfg.device = f"cuda:{app_launcher.local_rank}"
+        local_rank = int(os.getenv("LOCAL_RANK", "0"))
+        global_rank = int(os.getenv("RANK", "0"))
+        env_cfg.sim.device = f"cuda:{local_rank}"
+        agent_cfg.device = f"cuda:{local_rank}"
 
         # set seed to have diversity in different threads
-        seed = agent_cfg.seed + app_launcher.local_rank
+        seed = agent_cfg.seed + global_rank
         env_cfg.seed = seed
         agent_cfg.seed = seed
 
@@ -238,8 +240,15 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     env.close()
 
 
+@hydra_task_config(args_cli.task, args_cli.agent)
+def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agent_cfg: RslRlBaseRunnerCfg):
+    """Train using the physics backend selected by the task config."""
+    _run(env_cfg, agent_cfg)
+
+
 if __name__ == "__main__":
     # run the main function
-    main()
-    # close sim app
-    simulation_app.close()
+    try:
+        main()
+    finally:
+        simulation_app.close()

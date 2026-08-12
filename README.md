@@ -1,8 +1,9 @@
 # cyclo_lab
 
-[![IsaacSim](https://img.shields.io/badge/IsaacSim-5.1.0-silver.svg)](https://docs.isaacsim.omniverse.nvidia.com/latest/index.html)
-[![Isaac Lab](https://img.shields.io/badge/IsaacLab-2.3.0-silver)](https://isaac-sim.github.io/IsaacLab/main/index.html)
-[![Python](https://img.shields.io/badge/python-3.11-blue.svg)](https://docs.python.org/3/whatsnew/3.11.html)
+[![IsaacSim](https://img.shields.io/badge/IsaacSim-6.0.0-silver.svg)](https://docs.isaacsim.omniverse.nvidia.com/6.0.0/index.html)
+[![Isaac Lab](https://img.shields.io/badge/IsaacLab-3.0.0--beta2-silver)](https://isaac-sim.github.io/IsaacLab/develop/index.html)
+[![Physics](https://img.shields.io/badge/physics-Newton-blueviolet)](https://isaac-sim.github.io/IsaacLab/develop/source/overview/core-concepts/physical-backends/newton/index.html)
+[![Python](https://img.shields.io/badge/python-3.12-blue.svg)](https://docs.python.org/3/whatsnew/3.12.html)
 [![Linux platform](https://img.shields.io/badge/platform-linux--64-orange.svg)](https://releases.ubuntu.com/22.04/)
 [![License](https://img.shields.io/badge/license-Apache2.0-yellow.svg)](https://opensource.org/license/apache-2-0)
 
@@ -14,7 +15,9 @@ https://github.com/user-attachments/assets/28347b4b-f90c-4a4f-8916-621f917d86cb
 This project provides simulation environments, configuration tools, and task definitions tailored for Robotis hardware, leveraging NVIDIA Isaac Sim’s powerful GPU-accelerated physics engine and Isaac Lab’s modular RL pipeline.
 
 > [!IMPORTANT]
-> This repository currently depends on **IsaacLab v2.2.0** or higher.
+> This branch depends on **Isaac Lab v3.0.0-beta2** and selects the experimental
+> **Newton / MuJoCo-Warp** backend for the K1 velocity and mimic environments.
+> AI Worker, OMY, and FFW tasks are outside the validated scope of this branch.
 >
 
 ## Installation (Docker)
@@ -60,14 +63,52 @@ Docker installation provides a consistent environment with all dependencies pre-
 - `./docker/container.sh clean` - Remove container and image
 
 **What's included in the Docker image:**
-- Isaac Sim 5.1.0
-- Isaac Lab v2.3.0 (from third_party submodule)
+- Isaac Sim 6.0.0
+- Isaac Lab v3.0.0-beta2 (from third_party submodule)
+- Newton 1.2.1 and MuJoCo-Warp
+- RSL-RL 5.x for K1 training
 - CycloneDDS 0.10.2 (from third_party submodule)
 - robotis_dds_python (from third_party submodule)
 - LeRobot 0.3.3 (in separate virtual environment at `~/lerobot_env`)
 - All required dependencies and configurations
 
+## K1 Newton backend
+
+The K1 velocity and mimic task configurations assign `NewtonCfg` to
+`SimulationCfg.physics`, so no extra physics command-line switch is required. Run the
+finite smoke test before training:
+
+```bash
+python scripts/tools/smoke_k1_newton.py --num_envs=2 --steps=20 --viz none
+```
+
+The K1 asset comes from the URDF under `third_party/ai_sapiens`. That submodule remains
+required as a robot-description dependency; no AI Worker process is started. Runtime
+material randomization is disabled for K1 because Newton does not currently support
+changing collider materials at runtime. The scripts launch Isaac Sim Kit headlessly for
+URDF import while Newton remains the dynamics backend. Newton support in Isaac Lab 3.0
+is beta.
+
+K1 velocity training:
+
+```bash
+python scripts/reinforcement_learning/rsl_rl/train.py \
+  --task Cyclo-Velocity-Flat-K1-Rev1-v0 --num_envs=4096 --viz none
+```
+
+K1 mimic training (Dance1 example):
+
+```bash
+python scripts/reinforcement_learning/rsl_rl/train.py \
+  --task Cyclo-Mimic-K1-Rev1-Dance1 --num_envs=4096 --viz none
+```
+
 ## Try examples
+
+> [!NOTE]
+> The OMY, FFW, and AI Worker examples below are retained as upstream reference
+> documentation. They are not registered, validated, or started on this K1-only
+> Newton branch.
 
 ### Sim2Sim
 <details>

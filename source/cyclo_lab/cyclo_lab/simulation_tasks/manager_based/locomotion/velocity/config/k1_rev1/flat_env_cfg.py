@@ -22,7 +22,7 @@ from isaaclab.managers import RewardTermCfg as RewTerm
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.managers import TerminationTermCfg as DoneTerm
 from isaaclab.utils import configclass
-from isaaclab.utils.noise import AdditiveUniformNoiseCfg as Unoise
+from isaaclab.utils.noise import UniformNoiseCfg as Unoise
 
 import cyclo_lab.simulation_tasks.manager_based.locomotion.velocity.mdp as mdp
 from cyclo_lab.simulation_tasks.manager_based.locomotion.velocity.velocity_env_cfg import (
@@ -80,7 +80,13 @@ class K1Rev1ObservationsCfg:
 
     @configclass
     class CriticCfg(ObsGroup):
-        base_lin_vel = ObsTerm(func=mdp.base_lin_vel)
+        # MJWarp can occasionally produce a very large but still finite
+        # horizontal root velocity for one environment during a hard contact.
+        # This privileged term is absent from the actor, so an outlier can
+        # overflow only the value loss while rewards and policy stay healthy.
+        # Keep every physically plausible K1 velocity while preventing one
+        # solver outlier from poisoning the critic and its five-frame history.
+        base_lin_vel = ObsTerm(func=mdp.base_lin_vel, clip=(-10.0, 10.0))
         base_ang_vel = ObsTerm(func=mdp.base_ang_vel)
         projected_gravity = ObsTerm(func=mdp.projected_gravity)
         velocity_commands = ObsTerm(func=mdp.generated_commands, params={"command_name": "base_velocity"})
@@ -286,25 +292,39 @@ class K1Rev1FlatEnvCfg(LocomotionVelocityEnvCfg):
     def __post_init__(self):
         # post init of parent
         super().__post_init__()
+        # Route position targets through Newton's native actuator pipeline.
+        # The legacy Lab path can leave URDF joints on their zero-gain drives
+        # with the Newton backend, which makes policy targets ineffective.
+        self.sim.use_newton_actuators = True
         # Scene
         self.scene.robot = K1_REV1_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
+        # Match the contact/air-time transition threshold used by the
+        # successful PhysX runs. Newton otherwise resolves ``None`` to 0 N.
+        self.scene.contact_forces.force_threshold = 1.0
         if self.scene.height_scanner:
             self.scene.height_scanner.prim_path = "{ENV_REGEX_NS}/Robot/torso_link"
 
         # Randomization
         self.events.add_base_mass.params["asset_cfg"].body_names = "torso_link"
-        self.events.base_com.params["asset_cfg"].body_names = "torso_link"
+        # Runtime CoM updates are currently unsafe with MJWarp because the
+        # articulated mass matrix may not be fully rebuilt. Keep mass and
+        # friction randomization, but disable CoM randomization for K1/Newton.
+        self.events.base_com = None
         self.events.base_external_force_torque.params["asset_cfg"].body_names = "torso_link"
 
         # Flat terrain
         self.scene.terrain.terrain_type = "plane"
         self.scene.terrain.terrain_generator = None
+        # MJWarp combines the two colliders' sliding friction with max().
+        # Keep the ground at zero so the main-branch robot material value
+        # becomes the effective foot-ground contact friction.
+        self.scene.terrain.physics_material.static_friction = 0.0
+        self.scene.terrain.physics_material.dynamic_friction = 0.0
+        self.sim.physics_material = self.scene.terrain.physics_material
         self.scene.height_scanner = None
         self.curriculum.terrain_levels = None
 
         # Randomization
-        self.events.physics_material.params["static_friction_range"] = (0.8, 0.8)
-        self.events.physics_material.params["dynamic_friction_range"] = (0.6, 0.6)
         self.events.push_robot.interval_range_s = (10.0, 15.0)
         self.events.base_external_force_torque.mode = "reset"
         self.events.base_external_force_torque.interval_range_s = None

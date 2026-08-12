@@ -32,6 +32,9 @@ datasets/*.h5
 # Docker (exclude everything except entrypoint.sh)
 docker/*
 !docker/entrypoint.sh
+!docker/apply_isaaclab_patches.sh
+!docker/patches/
+!docker/patches/*.patch
 .dockerignore
 
 # Documentation

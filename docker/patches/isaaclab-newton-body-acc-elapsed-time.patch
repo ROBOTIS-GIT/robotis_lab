@@ -1,0 +1,123 @@
+diff --git a/source/isaaclab_newton/isaaclab_newton/assets/articulation/articulation_data.py b/source/isaaclab_newton/isaaclab_newton/assets/articulation/articulation_data.py
+index 2ddb3a13..dd10a158 100644
+--- a/source/isaaclab_newton/isaaclab_newton/assets/articulation/articulation_data.py
++++ b/source/isaaclab_newton/isaaclab_newton/assets/articulation/articulation_data.py
+@@ -762,13 +762,21 @@ class ArticulationData(BaseArticulationData):
+         All values are relative to the world.
+         """
+         if self._body_com_acc_w.timestamp < self._sim_timestamp:
++            previous_timestamp = self._body_com_acc_w.timestamp
++            time_elapsed = (
++                self._sim_timestamp - previous_timestamp
++                if previous_timestamp >= 0.0
++                else SimulationManager.get_dt()
++            )
++            if time_elapsed <= 0.0:
++                time_elapsed = SimulationManager.get_dt()
+             wp.launch(
+                 shared_kernels.derive_body_acceleration_from_body_com_velocities,
+                 dim=(self._num_instances, self._num_bodies),
+                 device=self.device,
+                 inputs=[
+                     self._sim_bind_body_com_vel_w,
+-                    SimulationManager.get_dt(),
++                    time_elapsed,
+                     self._previous_body_com_vel,
+                 ],
+                 outputs=[
+diff --git a/source/isaaclab_newton/isaaclab_newton/assets/rigid_object/rigid_object_data.py b/source/isaaclab_newton/isaaclab_newton/assets/rigid_object/rigid_object_data.py
+index 43e719d3..0cc2ca7e 100644
+--- a/source/isaaclab_newton/isaaclab_newton/assets/rigid_object/rigid_object_data.py
++++ b/source/isaaclab_newton/isaaclab_newton/assets/rigid_object/rigid_object_data.py
+@@ -344,13 +344,21 @@ class RigidObjectData(BaseRigidObjectData):
+         This quantity is the acceleration of the rigid bodies' center of mass frame relative to the world.
+         """
+         if self._body_com_acc_w.timestamp < self._sim_timestamp:
++            previous_timestamp = self._body_com_acc_w.timestamp
++            time_elapsed = (
++                self._sim_timestamp - previous_timestamp
++                if previous_timestamp >= 0.0
++                else SimulationManager.get_dt()
++            )
++            if time_elapsed <= 0.0:
++                time_elapsed = SimulationManager.get_dt()
+             wp.launch(
+                 shared_kernels.derive_body_acceleration_from_body_com_velocities,
+                 dim=(self._num_instances, 1),
+                 device=self.device,
+                 inputs=[
+                     self._sim_bind_body_com_vel_w,
+-                    SimulationManager.get_dt(),
++                    time_elapsed,
+                     self._previous_body_com_vel,
+                 ],
+                 outputs=[
+diff --git a/source/isaaclab_newton/isaaclab_newton/assets/rigid_object_collection/rigid_object_collection_data.py b/source/isaaclab_newton/isaaclab_newton/assets/rigid_object_collection/rigid_object_collection_data.py
+index 9fe3ec12..64d85a75 100644
+--- a/source/isaaclab_newton/isaaclab_newton/assets/rigid_object_collection/rigid_object_collection_data.py
++++ b/source/isaaclab_newton/isaaclab_newton/assets/rigid_object_collection/rigid_object_collection_data.py
+@@ -270,13 +270,21 @@ class RigidObjectCollectionData(BaseRigidObjectCollectionData):
+         This quantity is the acceleration of the rigid bodies' center of mass frame relative to the world.
+         """
+         if self._body_com_acc_w.timestamp < self._sim_timestamp:
++            previous_timestamp = self._body_com_acc_w.timestamp
++            time_elapsed = (
++                self._sim_timestamp - previous_timestamp
++                if previous_timestamp >= 0.0
++                else SimulationManager.get_dt()
++            )
++            if time_elapsed <= 0.0:
++                time_elapsed = SimulationManager.get_dt()
+             wp.launch(
+                 shared_kernels.derive_body_acceleration_from_body_com_velocities,
+                 dim=(self.num_instances, self.num_bodies),
+                 device=self.device,
+                 inputs=[
+                     self.body_com_vel_w.warp,
+-                    SimulationManager.get_dt(),
++                    time_elapsed,
+                     self._previous_body_com_vel,
+                 ],
+                 outputs=[
+diff --git a/source/isaaclab_newton/test/assets/test_articulation.py b/source/isaaclab_newton/test/assets/test_articulation.py
+index 5202da63..481df3e2 100644
+--- a/source/isaaclab_newton/test/assets/test_articulation.py
++++ b/source/isaaclab_newton/test/assets/test_articulation.py
+@@ -583,6 +583,35 @@ def test_initialization_floating_base(sim, num_articulations, device, add_ground
+         articulation.update(sim.cfg.dt)
+-
+-
++
++
++@pytest.mark.parametrize("num_articulations", [1])
++@pytest.mark.parametrize("device", ["cuda:0"])
++@pytest.mark.parametrize("articulation_type", ["humanoid"])
++def test_body_com_acc_uses_elapsed_update_time(sim, num_articulations, device, articulation_type):
++    """Body acceleration must use elapsed data time when several physics steps pass between reads."""
++    articulation_cfg = generate_articulation_cfg(articulation_type=articulation_type, stiffness=0.0, damping=0.0)
++    articulation, _ = generate_articulation(articulation_cfg, num_articulations, device=device)
++    sim.reset()
++
++    # Prime the finite-difference history at the initial state.
++    previous_velocity = articulation.data.body_com_vel_w.torch.clone()
++    _ = articulation.data.body_com_acc_w.torch
++
++    num_lazy_steps = 4
++    for _ in range(num_lazy_steps):
++        sim.step()
++    elapsed_time = sim.cfg.dt * num_lazy_steps
++    articulation.update(elapsed_time)
++
++    current_velocity = articulation.data.body_com_vel_w.torch.clone()
++    expected_acceleration = (current_velocity - previous_velocity) / elapsed_time
++    torch.testing.assert_close(
++        articulation.data.body_com_acc_w.torch,
++        expected_acceleration,
++        atol=1.0e-4,
++        rtol=1.0e-4,
++    )
++
++
+ @pytest.mark.parametrize("num_articulations", [1, 2])
+ @pytest.mark.parametrize("device", ["cuda:0", "cpu"])
+ @pytest.mark.parametrize("articulation_type", ["panda"])

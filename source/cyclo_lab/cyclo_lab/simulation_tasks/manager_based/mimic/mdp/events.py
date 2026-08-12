@@ -25,6 +25,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 
 import torch
+import warp as wp
 import isaaclab.utils.math as math_utils
 from isaaclab.assets import Articulation
 from isaaclab.envs.mdp.events import _randomize_prop_by_op
@@ -43,7 +44,8 @@ def apply_home_joint_offset_noise(
     distribution: Literal["uniform", "log_uniform", "gaussian"] = "uniform",
 ):
     asset: Articulation = env.scene[asset_cfg.name]
-    asset.data.default_joint_pos_nominal = torch.clone(asset.data.default_joint_pos[0])
+    default_joint_pos = wp.to_torch(asset.data.default_joint_pos)
+    asset.data.default_joint_pos_nominal = default_joint_pos[0].clone()
 
     if env_ids is None:
         env_ids = torch.arange(env.scene.num_envs, device=asset.device)
@@ -54,14 +56,14 @@ def apply_home_joint_offset_noise(
         joint_ids = torch.tensor(asset_cfg.joint_ids, dtype=torch.int, device=asset.device)
 
     if pos_distribution_params is not None:
-        pos = asset.data.default_joint_pos.to(asset.device).clone()
+        pos = default_joint_pos.clone()
         pos = _randomize_prop_by_op(
             pos, pos_distribution_params, env_ids, joint_ids, operation=operation, distribution=distribution
         )[env_ids][:, joint_ids]
 
         if env_ids != slice(None) and joint_ids != slice(None):
             env_ids = env_ids[:, None]
-        asset.data.default_joint_pos[env_ids, joint_ids] = pos
+        default_joint_pos[env_ids, joint_ids] = pos
         env.action_manager.get_term("joint_pos")._offset[env_ids, joint_ids] = pos
 
 
@@ -73,19 +75,21 @@ def apply_link_com_offset_noise(
 ):
     asset: Articulation = env.scene[asset_cfg.name]
     if env_ids is None:
-        env_ids = torch.arange(env.scene.num_envs, device="cpu")
+        env_ids = torch.arange(env.scene.num_envs, device=asset.device)
     else:
-        env_ids = env_ids.cpu()
+        env_ids = env_ids.to(asset.device)
 
     if asset_cfg.body_ids == slice(None):
-        body_ids = torch.arange(asset.num_bodies, dtype=torch.int, device="cpu")
+        body_ids = torch.arange(asset.num_bodies, dtype=torch.int, device=asset.device)
     else:
-        body_ids = torch.tensor(asset_cfg.body_ids, dtype=torch.int, device="cpu")
+        body_ids = torch.tensor(asset_cfg.body_ids, dtype=torch.int, device=asset.device)
 
     range_list = [com_range.get(key, (0.0, 0.0)) for key in ["x", "y", "z"]]
-    ranges = torch.tensor(range_list, device="cpu")
-    rand_samples = math_utils.sample_uniform(ranges[:, 0], ranges[:, 1], (len(env_ids), 3), device="cpu").unsqueeze(1)
+    ranges = torch.tensor(range_list, device=asset.device)
+    rand_samples = math_utils.sample_uniform(
+        ranges[:, 0], ranges[:, 1], (len(env_ids), 3), device=asset.device
+    ).unsqueeze(1)
 
-    coms = asset.root_physx_view.get_coms().clone()
-    coms[:, body_ids, :3] += rand_samples
-    asset.root_physx_view.set_coms(coms, env_ids)
+    coms = wp.to_torch(asset.data.body_com_pos_b).clone()
+    coms[env_ids[:, None], body_ids] += rand_samples
+    asset.set_coms_index(coms=coms[env_ids[:, None], body_ids], body_ids=body_ids, env_ids=env_ids)

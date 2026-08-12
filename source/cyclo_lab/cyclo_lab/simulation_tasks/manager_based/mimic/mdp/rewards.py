@@ -25,6 +25,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import torch
+import warp as wp
 from isaaclab.assets import Articulation
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.utils.math import quat_error_magnitude
@@ -137,7 +138,7 @@ def ankle_coupling_penalty(
     lr_idx = joint_names.index(left_roll_name)
     rp_idx = joint_names.index(right_pitch_name)
     rr_idx = joint_names.index(right_roll_name)
-    joint_pos = asset.data.joint_pos
+    joint_pos = wp.to_torch(asset.data.joint_pos)
 
     def ellipse_violation(pitch: torch.Tensor, roll: torch.Tensor) -> torch.Tensor:
         pitch_norm = torch.where(pitch < 0, pitch / p_neg, pitch / p_pos)

@@ -32,8 +32,6 @@ CYCLO_LAB_ASSETS_METADATA = toml.load(os.path.join(CYCLO_LAB_ASSETS_EXT_DIR, "co
 # Configure the module-level variables
 __version__ = CYCLO_LAB_ASSETS_METADATA["package"]["version"]
 
-from .OMY import *
-from .FFW_BG2 import *
-from .FFW_SG2 import *
-from .FFW_SH5 import *
+# This branch intentionally exposes only the K1 asset. Importing every robot
+# eagerly pulls in OMY/FFW and Isaac Sim-only helpers even for kitless Newton.
 from .K1_rev1 import *

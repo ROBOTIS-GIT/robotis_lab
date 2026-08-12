@@ -28,6 +28,7 @@ from dataclasses import MISSING
 from typing import TYPE_CHECKING
 
 import torch
+import warp as wp
 from isaaclab.assets import Articulation
 from isaaclab.managers import CommandTerm, CommandTermCfg
 from isaaclab.markers import VisualizationMarkers, VisualizationMarkersCfg
@@ -64,11 +65,21 @@ class ReferenceTrajectoryCommand(CommandTerm):
             self.robot.find_bodies(self.cfg.body_names, preserve_order=True)[0], dtype=torch.long, device=self.device
         )
 
-        self.reference = ReferenceTrajectory(self.cfg.trajectory_file, self.tracked_body_ids, device=self.device)
+        policy_fps = 1.0 / (env.cfg.decimation * env.cfg.sim.dt)
+        self.reference = ReferenceTrajectory(
+            self.cfg.trajectory_file,
+            runtime_joint_names=self.robot.data.joint_names,
+            tracked_body_names=self.cfg.body_names,
+            device=self.device,
+            source_joint_names=self.cfg.source_joint_names,
+            source_body_names=self.cfg.source_body_names,
+            source_quat_order=self.cfg.source_quat_order,
+            expected_fps=policy_fps,
+        )
         self.frame_ids = torch.zeros(self.num_envs, dtype=torch.long, device=self.device)
         self.aligned_body_position_w = torch.zeros(self.num_envs, len(cfg.body_names), 3, device=self.device)
         self.aligned_body_orientation_w = torch.zeros(self.num_envs, len(cfg.body_names), 4, device=self.device)
-        self.aligned_body_orientation_w[:, :, 0] = 1.0
+        self.aligned_body_orientation_w[:, :, 3] = 1.0
         self.aligned_body_linear_velocity_w = torch.zeros(self.num_envs, len(cfg.body_names), 3, device=self.device)
         self.aligned_body_angular_velocity_w = torch.zeros(self.num_envs, len(cfg.body_names), 3, device=self.device)
 
@@ -140,43 +151,43 @@ class ReferenceTrajectoryCommand(CommandTerm):
 
     @property
     def robot_joint_pos(self) -> torch.Tensor:
-        return self.robot.data.joint_pos
+        return wp.to_torch(self.robot.data.joint_pos)
 
     @property
     def robot_joint_vel(self) -> torch.Tensor:
-        return self.robot.data.joint_vel
+        return wp.to_torch(self.robot.data.joint_vel)
 
     @property
     def robot_body_pos_w(self) -> torch.Tensor:
-        return self.robot.data.body_pos_w[:, self.tracked_body_ids]
+        return wp.to_torch(self.robot.data.body_pos_w)[:, self.tracked_body_ids]
 
     @property
     def robot_body_quat_w(self) -> torch.Tensor:
-        return self.robot.data.body_quat_w[:, self.tracked_body_ids]
+        return wp.to_torch(self.robot.data.body_quat_w)[:, self.tracked_body_ids]
 
     @property
     def robot_body_lin_vel_w(self) -> torch.Tensor:
-        return self.robot.data.body_lin_vel_w[:, self.tracked_body_ids]
+        return wp.to_torch(self.robot.data.body_lin_vel_w)[:, self.tracked_body_ids]
 
     @property
     def robot_body_ang_vel_w(self) -> torch.Tensor:
-        return self.robot.data.body_ang_vel_w[:, self.tracked_body_ids]
+        return wp.to_torch(self.robot.data.body_ang_vel_w)[:, self.tracked_body_ids]
 
     @property
     def robot_anchor_pos_w(self) -> torch.Tensor:
-        return self.robot.data.body_pos_w[:, self.robot_anchor_body_id]
+        return wp.to_torch(self.robot.data.body_pos_w)[:, self.robot_anchor_body_id]
 
     @property
     def robot_anchor_quat_w(self) -> torch.Tensor:
-        return self.robot.data.body_quat_w[:, self.robot_anchor_body_id]
+        return wp.to_torch(self.robot.data.body_quat_w)[:, self.robot_anchor_body_id]
 
     @property
     def robot_anchor_lin_vel_w(self) -> torch.Tensor:
-        return self.robot.data.body_lin_vel_w[:, self.robot_anchor_body_id]
+        return wp.to_torch(self.robot.data.body_lin_vel_w)[:, self.robot_anchor_body_id]
 
     @property
     def robot_anchor_ang_vel_w(self) -> torch.Tensor:
-        return self.robot.data.body_ang_vel_w[:, self.robot_anchor_body_id]
+        return wp.to_torch(self.robot.data.body_ang_vel_w)[:, self.robot_anchor_body_id]
 
     def _update_metrics(self):
         self.metrics["error_anchor_pos"] = torch.norm(self.anchor_pos_w - self.robot_anchor_pos_w, dim=-1)
@@ -270,7 +281,7 @@ class ReferenceTrajectoryCommand(CommandTerm):
         joint_pos = self.joint_pos.clone()
         joint_vel = self.joint_vel.clone()
         joint_pos += sample_uniform(*self.cfg.reset_joint_position_noise, joint_pos.shape, joint_pos.device)
-        soft_joint_pos_limits = self.robot.data.soft_joint_pos_limits[env_ids]
+        soft_joint_pos_limits = wp.to_torch(self.robot.data.soft_joint_pos_limits)[env_ids]
         joint_pos[env_ids] = torch.clip(
             joint_pos[env_ids], soft_joint_pos_limits[:, :, 0], soft_joint_pos_limits[:, :, 1]
         )
@@ -368,6 +379,9 @@ class ReferenceTrajectoryCommandCfg(CommandTermCfg):
     trajectory_file: str = MISSING
     anchor_body_name: str = MISSING
     body_names: list[str] = MISSING
+    source_joint_names: list[str] | None = None
+    source_body_names: list[str] | None = None
+    source_quat_order: str | None = None
     reset_pose_noise: dict[str, tuple[float, float]] = {}
     reset_velocity_noise: dict[str, tuple[float, float]] = {}
     reset_joint_position_noise: tuple[float, float] = (-0.52, 0.52)

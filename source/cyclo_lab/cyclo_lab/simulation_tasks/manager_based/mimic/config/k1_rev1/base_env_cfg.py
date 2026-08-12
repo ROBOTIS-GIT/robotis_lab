@@ -57,6 +57,62 @@ UNDESIRED_CONTACT_BODY_NAMES = [
     r"^(?!left_ankle_roll_link$)(?!right_ankle_roll_link$)(?!left_wrist_roll_rubber_hand$)(?!right_wrist_roll_rubber_hand$).+$"
 ]
 
+# Existing K1 mimic NPZ files were recorded with the Isaac Lab 2 / PhysX
+# breadth-first articulation ordering and WXYZ quaternions. Keep those files
+# unchanged and describe their source layout explicitly for the Newton loader.
+LEGACY_PHYSX_JOINT_NAMES = [
+    "left_hip_pitch_joint",
+    "right_hip_pitch_joint",
+    "waist_yaw_joint",
+    "left_hip_roll_joint",
+    "right_hip_roll_joint",
+    "left_shoulder_pitch_joint",
+    "right_shoulder_pitch_joint",
+    "left_hip_yaw_joint",
+    "right_hip_yaw_joint",
+    "left_shoulder_roll_joint",
+    "right_shoulder_roll_joint",
+    "left_knee_joint",
+    "right_knee_joint",
+    "left_shoulder_yaw_joint",
+    "right_shoulder_yaw_joint",
+    "left_ankle_pitch_joint",
+    "right_ankle_pitch_joint",
+    "left_elbow_joint",
+    "right_elbow_joint",
+    "left_ankle_roll_joint",
+    "right_ankle_roll_joint",
+    "left_wrist_roll_joint",
+    "right_wrist_roll_joint",
+]
+
+LEGACY_PHYSX_BODY_NAMES = [
+    "pelvis",
+    "left_hip_pitch_link",
+    "right_hip_pitch_link",
+    "torso_link",
+    "left_hip_roll_link",
+    "right_hip_roll_link",
+    "left_shoulder_pitch_link",
+    "right_shoulder_pitch_link",
+    "left_hip_yaw_link",
+    "right_hip_yaw_link",
+    "left_shoulder_roll_link",
+    "right_shoulder_roll_link",
+    "left_knee_link",
+    "right_knee_link",
+    "left_shoulder_yaw_link",
+    "right_shoulder_yaw_link",
+    "left_ankle_pitch_link",
+    "right_ankle_pitch_link",
+    "left_elbow_link",
+    "right_elbow_link",
+    "left_ankle_roll_link",
+    "right_ankle_roll_link",
+    "left_wrist_roll_rubber_hand",
+    "right_wrist_roll_rubber_hand",
+]
+
 
 @configclass
 class K1Rev1MimicRewardsCfg(RewardsCfg):
@@ -86,5 +142,10 @@ class K1Rev1MimicEnvCfg(TrackingEnvCfg):
         self.actions.joint_pos.scale = K1_REV1_INERTIA_TUNED_ACTION_SCALE
         self.commands.reference_trajectory.anchor_body_name = "torso_link"
         self.commands.reference_trajectory.body_names = TRACKED_BODY_NAMES
-        self.events.torso_com_offset_noise.params["asset_cfg"].body_names = "torso_link"
+        self.commands.reference_trajectory.source_joint_names = LEGACY_PHYSX_JOINT_NAMES
+        self.commands.reference_trajectory.source_body_names = LEGACY_PHYSX_BODY_NAMES
+        self.commands.reference_trajectory.source_quat_order = "wxyz"
+        # Runtime articulation CoM randomization can produce NaNs with the
+        # current Newton/MJWarp backend. Keep the URDF nominal CoM for K1.
+        self.events.torso_com_offset_noise = None
         self.terminations.end_body_pos.params["body_names"] = END_BODY_NAMES

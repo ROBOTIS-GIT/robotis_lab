@@ -13,6 +13,7 @@ keywords = ["extension", "cyclo_lab", "isaaclab"]
 
 [dependencies]
 "isaaclab" = {}
+"isaaclab_newton" = {}
 
 [core]
 reloadable = false

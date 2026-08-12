@@ -21,6 +21,7 @@ import os
 from typing import Any, TypeAlias
 
 import yaml
+import warp as wp
 
 from isaaclab.assets import Articulation
 from isaaclab.envs import ManagerBasedRLEnv
@@ -156,7 +157,9 @@ def _default_joint_position_by_name(context: _ExportContext) -> dict[str, Any]:
     """Return nominal joint positions, excluding per-environment domain randomization."""
     nominal = getattr(context.asset.data, "default_joint_pos_nominal", None)
     if nominal is None:
-        nominal = context.asset.data.default_joint_pos[0]
+        nominal = wp.to_torch(context.asset.data.default_joint_pos)[0]
+    elif isinstance(nominal, wp.array):
+        nominal = wp.to_torch(nominal)
     if nominal.ndim == 2:
         nominal = nominal[0]
     values = _tensor_to_list(nominal)
@@ -174,8 +177,8 @@ def _export_joint_properties(context: _ExportContext) -> dict[str, _CfgDict]:
     joint_ids = context.policy_joint_ids
 
     joint_properties = {}
-    stiffness = _tensor_to_list(asset.data.default_joint_stiffness[0, joint_ids])
-    damping = _tensor_to_list(asset.data.default_joint_damping[0, joint_ids])
+    stiffness = _tensor_to_list(wp.to_torch(asset.data.default_joint_stiffness)[0, joint_ids])
+    damping = _tensor_to_list(wp.to_torch(asset.data.default_joint_damping)[0, joint_ids])
     default_position_by_name = _default_joint_position_by_name(context)
     default_joint_pos = [default_position_by_name[joint_name] for joint_name in joint_names]
     for joint_name, default_position, joint_stiffness, joint_damping in zip(
