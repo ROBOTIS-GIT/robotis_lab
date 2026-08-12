@@ -27,6 +27,9 @@ AI_SAPIENS_DESCRIPTION_DIR = os.path.abspath(
     os.path.join(CYCLO_LAB_ASSETS_EXT_DIR, "../../third_party/ai_sapiens/ai_sapiens_description")
 )
 K1_REV1_URDF_PATH = f"{AI_SAPIENS_DESCRIPTION_DIR}/urdf/k1_rev1/k1.urdf"
+AI_SAPIENS_ROS_PACKAGE_PATHS = [
+    {"name": "ai_sapiens_description", "path": AI_SAPIENS_DESCRIPTION_DIR},
+]
 
 NATURAL_FREQ = 10.0 * 2.0 * math.pi
 DAMPING_RATIO = 2.0
@@ -48,6 +51,7 @@ DAMPING_QC080_240_R020_RE = 2.0 * DAMPING_RATIO * ARMATURE_QC080_240_R020_RE * N
 K1_REV1_CFG = ArticulationCfg(
     spawn=sim_utils.UrdfFileCfg(
         asset_path=K1_REV1_URDF_PATH,
+        ros_package_paths=AI_SAPIENS_ROS_PACKAGE_PATHS,
         activate_contact_sensors=True,
         fix_base=False,
         self_collision=True,
@@ -206,6 +210,7 @@ K1_REV1_CFG = ArticulationCfg(
 K1_REV1_INERTIA_TUNED_CFG = ArticulationCfg(
     spawn=sim_utils.UrdfFileCfg(
         asset_path=K1_REV1_URDF_PATH,
+        ros_package_paths=AI_SAPIENS_ROS_PACKAGE_PATHS,
         fix_base=False,
         self_collision=True,
         activate_contact_sensors=True,
