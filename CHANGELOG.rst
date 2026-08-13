@@ -2,6 +2,12 @@
 Changelog for package cyclo_lab
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+2.0.3 (2026-08-13)
+------------------
+* Updated the K1 ankle pitch and roll actuators to use their per-actuator
+  armature, stiffness, and damping values without closed-loop doubling.
+* Contributors: Kiwoong Park
+
 2.0.2 (2026-07-24)
 ------------------
 * Updated the K1 ankle pitch actuator configuration to use the Q80 actuator.
