@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from copy import deepcopy
 
 from isaaclab.assets.articulation import ArticulationCfg
@@ -11,7 +12,8 @@ from isaaclab.managers import SceneEntityCfg
 from isaaclab.utils import configclass
 
 from cyclo_lab.assets.environments.robotis_showroom import (
-    ROBOTIS_SHOWROOM_BASE_USD_PATH,
+    ROBOTIS_SHOWROOM_BACKGROUND_TEXTURE_PATHS,
+    ROBOTIS_SHOWROOM_BACKGROUND_USD_PATH,
     iter_robotis_showroom_object_cfgs,
     make_robotis_showroom_environment_cfg,
 )
@@ -27,10 +29,13 @@ from .mdp import ffw_sg2_showroom_events
 from .showroom_env_cfg import ShowroomEnvCfg
 
 
-SG2_SHOWROOM_ROBOT_POS = (-1.316, 1.681, 0.0)
+SG2_SHOWROOM_ROBOT_POS = (-1.116, 1.681, 0.0)
 SG2_SHOWROOM_ROBOT_ROT = (0.0, 0.0, 0.0, 1.0)
 SG2_SHOWROOM_HEAD_CAMERA_WIDTH = 640
 SG2_SHOWROOM_HEAD_CAMERA_HEIGHT = 480
+SG2_SHOWROOM_ROOT_POSITION_RANDOMIZATION_RADIUS = 0.1
+SG2_SHOWROOM_ROOT_YAW_RANDOMIZATION = math.radians(10.0)
+SG2_SHOWROOM_WALL_BACKGROUND_ZOOM_RANGE = (1.0, 1.3)
 SG2_SHOWROOM_INITIAL_JOINT_POSITIONS = {
     "arm_l_joint1": 0.0005,
     "arm_l_joint2": 0.6040,
@@ -76,6 +81,25 @@ class EventCfg:
         params={"reset_joint_targets": True},
     )
 
+    randomize_robot_root_pose = EventTerm(
+        func=ffw_sg2_showroom_events.randomize_root_pose_in_radius,
+        mode="reset",
+        params={
+            "max_translation_radius": SG2_SHOWROOM_ROOT_POSITION_RANDOMIZATION_RADIUS,
+            "max_yaw": SG2_SHOWROOM_ROOT_YAW_RANDOMIZATION,
+            "asset_cfg": SceneEntityCfg("robot"),
+        },
+    )
+
+    randomize_wall_background = EventTerm(
+        func=ffw_sg2_showroom_events.randomize_wall_background,
+        mode="reset",
+        params={
+            "texture_paths": ROBOTIS_SHOWROOM_BACKGROUND_TEXTURE_PATHS,
+            "zoom_range": SG2_SHOWROOM_WALL_BACKGROUND_ZOOM_RANGE,
+        },
+    )
+
     set_robot_joint_pose = EventTerm(
         func=ffw_sg2_showroom_events.set_default_joint_pose,
         mode="reset",
@@ -96,7 +120,7 @@ class FFWSG2ShowroomEnvCfg(ShowroomEnvCfg):
 
         self.scene.robot = make_sg2_showroom_robot_cfg().replace(prim_path="{ENV_REGEX_NS}/Robot")
         self.scene.robot.spawn.semantic_tags = [("class", "robot")]
-        self.scene.environment = make_robotis_showroom_environment_cfg(ROBOTIS_SHOWROOM_BASE_USD_PATH)
+        self.scene.environment = make_robotis_showroom_environment_cfg(ROBOTIS_SHOWROOM_BACKGROUND_USD_PATH)
         # Rendering cadence is owned by sim.render_interval. Sensors expose each
         # newly rendered frame directly to the topic bridge and operator viewer.
         self.scene.cam_head = make_ffw_sg2_head_camera_cfg(

@@ -17,6 +17,17 @@ ROBOTIS_SHOWROOM_BASE_USD_PATH = str(
     Path(__file__).resolve().parents[3]
     / "data/environments/robotis_showroom/robotis_showroom.usd"
 )
+ROBOTIS_SHOWROOM_BACKGROUND_USD_PATH = str(
+    Path(__file__).resolve().parents[3]
+    / "data/environments/robotis_showroom/robotis_showroom_background.usda"
+)
+ROBOTIS_SHOWROOM_BACKGROUND_TEXTURE_PATHS = tuple(
+    str(
+        Path(__file__).resolve().parents[3]
+        / f"data/environments/robotis_showroom/textures/lab_background_{index:02d}.jpg"
+    )
+    for index in range(1, 4)
+)
 ROBOTIS_SHOWROOM_OBJECTS_USD_PATH = str(
     Path(__file__).resolve().parents[3]
     / "data/environments/robotis_showroom/robotis_showroom_objects.usd"
