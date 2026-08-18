@@ -2,6 +2,14 @@
 Changelog for package cyclo_lab
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+2.1.0 (2026-08-18)
+------------------
+* Unified real-world and simulation task packages under
+  ``cyclo_lab.manager_based`` while preserving all existing Gym task IDs.
+* Updated Python package discovery for manager-based task subpackages.
+* Stabilized the Isaac Sim 5.1 Docker dependency installation.
+* Contributors: Taehyeong Kim
+
 2.0.3 (2026-08-13)
 ------------------
 * Updated the K1 ankle pitch and roll actuators to use their per-actuator
@@ -127,7 +135,9 @@ Fixed
 ------------------
 ### OMY Sim2Real Imitation Learning Pipeline
 * Folder Structure Refactor:
-    * Tasks are organized under the unified ``cyclo_lab.manager_based`` package.
+    * Tasks are now separated and organized into two categories:
+        * real_world_tasks - for real robot execution
+        * simulation_tasks - for simulation environments
 * Sim2Real Pipeline Implementation:
     * Task Recording: Added functionality to record demonstrations for the OMY plastic bottle pick-and-place task in simulation.
     * Sub-task Annotation: Introduced annotation tools for splitting demonstrations into meaningful sub-tasks, improving policy learning efficiency.
