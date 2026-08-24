@@ -2,6 +2,12 @@
 Changelog for package cyclo_lab
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+2.0.4 (2026-08-24)
+------------------
+* Regenerated the K1 Rev.1 dance motion datasets to match the current URDF
+  joint and body layout.
+* Contributors: Kiwoong Park
+
 2.0.3 (2026-08-13)
 ------------------
 * Updated the K1 ankle pitch and roll actuators to use their per-actuator
