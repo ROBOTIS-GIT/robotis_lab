@@ -141,10 +141,6 @@ Fixed
 0.2.0 (2025-10-28)
 ------------------
 ### OMY Sim2Real Imitation Learning Pipeline
-* Folder Structure Refactor:
-    * Tasks are now separated and organized into two categories:
-        * real_world_tasks - for real robot execution
-        * simulation_tasks - for simulation environments
 * Sim2Real Pipeline Implementation:
     * Task Recording: Added functionality to record demonstrations for the OMY plastic bottle pick-and-place task in simulation.
     * Sub-task Annotation: Introduced annotation tools for splitting demonstrations into meaningful sub-tasks, improving policy learning efficiency.
