@@ -8,6 +8,7 @@ Changelog for package cyclo_lab
   ``cyclo_lab.manager_based`` while preserving all existing Gym task IDs.
 * Updated Python package discovery for manager-based task subpackages.
 * Stabilized the Isaac Sim 5.1 Docker dependency installation.
+* Aligned the RSL-RL, SB3, SKRL, and RL-Games training paths with IsaacLab 2.3.
 * Contributors: Taehyeong Kim
 
 2.0.4 (2026-08-24)
