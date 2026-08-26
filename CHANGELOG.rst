@@ -2,13 +2,19 @@
 Changelog for package cyclo_lab
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-2.1.0 (2026-08-18)
+2.1.0 (2026-08-26)
 ------------------
 * Unified real-world and simulation task packages under
   ``cyclo_lab.manager_based`` while preserving all existing Gym task IDs.
 * Updated Python package discovery for manager-based task subpackages.
 * Stabilized the Isaac Sim 5.1 Docker dependency installation.
 * Contributors: Taehyeong Kim
+
+2.0.4 (2026-08-24)
+------------------
+* Regenerated the K1 Rev.1 dance motion datasets to match the current URDF
+  joint and body layout.
+* Contributors: Kiwoong Park
 
 2.0.3 (2026-08-13)
 ------------------
